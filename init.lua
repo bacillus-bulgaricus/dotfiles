@@ -30,8 +30,21 @@ print("Mapping leader to space")
 
 vim.opt.number = true
 vim.opt.relativenumber = true
+vim.opt.cursorline = true
+vim.opt.conceallevel = 2
+vim.opt.scrolloff = 5
 vim.g.mapleader = " "
 vim.g.neovide_input_macos_alt_is_meta = true
+-- Copy to clipboard
+vim.keymap.set("v", "<leader>y", '"+y')
+vim.keymap.set("n", "<leader>Y", '"+yg_')
+vim.keymap.set("n", "<leader>y", '"+y')
+
+-- Paste from clipboard
+vim.keymap.set("v", "<leader>p", '"+p')
+vim.keymap.set("v", "<leader>P", '"+P')
+vim.keymap.set("n", "<leader>p", '"+p')
+vim.keymap.set("n", "<leader>P", '"+P')
 
 -- -- Normal mode mapping for Vim command
 -- vim.keymap.set('n', '<Leader>ex1', '<cmd>echo "Example 1"<cr>')
@@ -52,8 +65,44 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 -- PLUGINS
 -- For terminal prompt: https://github.com/starship/starship
 require("lazy").setup({
-	-- Status line
+	-- Visual / Eye candy
 	{ "nvim-lualine/lualine.nvim", dependencies = { "nvim-tree/nvim-web-devicons" } },
+	{ "lukas-reineke/indent-blankline.nvim", main = "ibl", opts = {} },
+	{
+		"folke/noice.nvim",
+		event = "VeryLazy",
+		opts = {
+			-- add any options here
+		},
+		config = function()
+			require("noice").setup({
+				lsp = {
+					-- override markdown rendering so that **cmp** and other plugins use **Treesitter**
+					override = {
+						["vim.lsp.util.convert_input_to_markdown_lines"] = true,
+						["vim.lsp.util.stylize_markdown"] = true,
+						["cmp.entry.get_documentation"] = true, -- requires hrsh7th/nvim-cmp
+					},
+				},
+				-- you can enable a preset for easier configuration
+				presets = {
+					bottom_search = false, -- use a classic bottom cmdline for search
+					command_palette = false, -- position the cmdline and popupmenu together
+					long_message_to_split = true, -- long messages will be sent to a split
+					inc_rename = false, -- enables an input dialog for inc-rename.nvim
+					lsp_doc_border = true, -- add a border to hover docs and signature help
+				},
+			})
+		end,
+		dependencies = {
+			-- if you lazy-load any plugin below, make sure to add proper `module="..."` entries
+			"MunifTanjim/nui.nvim",
+			-- OPTIONAL:
+			--   `nvim-notify` is only needed, if you want to use the notification view.
+			--   If not available, we use `mini` as the fallback
+			"rcarriga/nvim-notify",
+		},
+	},
 
 	--File Navigation
 	{
@@ -66,6 +115,16 @@ require("lazy").setup({
 		"ThePrimeagen/harpoon",
 		branch = "harpoon2",
 		dependencies = { "nvim-lua/plenary.nvim" },
+	},
+	{
+		"nvim-neo-tree/neo-tree.nvim",
+		branch = "v3.x",
+		dependencies = {
+			"nvim-lua/plenary.nvim",
+			"nvim-tree/nvim-web-devicons", -- not strictly required, but recommended
+			"MunifTanjim/nui.nvim",
+			-- "3rd/image.nvim", -- Optional image support in preview window: See `# Preview Mode` for more information
+		},
 	},
 
 	--Colorscheme
@@ -84,9 +143,35 @@ require("lazy").setup({
 	"williamboman/mason-lspconfig.nvim",
 	"williamboman/mason.nvim",
 	"neovim/nvim-lspconfig",
+	{
+		"nvimdev/lspsaga.nvim",
+		config = function()
+			require("lspsaga").setup({
+				lightbulb = {
+					enable = false,
+				},
+			})
+		end,
+		dependencies = {
+			"nvim-treesitter/nvim-treesitter", -- optional
+			"nvim-tree/nvim-web-devicons", -- optional
+		},
+	},
 
 	-- Format
 	{ "stevearc/conform.nvim", opts = {} },
+
+	-- Productivity
+	{
+		"kylechui/nvim-surround",
+		version = "*", -- Use for stability; omit to use `main` branch for the latest features
+		event = "VeryLazy",
+		config = function()
+			require("nvim-surround").setup({
+				-- Configuration here, or leave empty to use defaults
+			})
+		end,
+	},
 
 	-- Autocomplete
 	"hrsh7th/cmp-nvim-lsp",
@@ -98,6 +183,14 @@ require("lazy").setup({
 	"saadparwaiz1/cmp_luasnip",
 	"folke/which-key.nvim",
 	{ "folke/neodev.nvim", opts = {} },
+	-- {
+	-- 	"ray-x/lsp_signature.nvim",
+	-- 	event = "VeryLazy",
+	-- 	opts = {},
+	-- 	config = function(_, opts)
+	-- 		require("lsp_signature").setup(opts)
+	-- 	end,
+	-- },
 
 	{ "nvim-treesitter/nvim-treesitter", build = ":TSUpdate" },
 	{
@@ -107,6 +200,8 @@ require("lazy").setup({
 		dependencies = { "nvim-lua/plenary.nvim" },
 	},
 	{ "nvim-telescope/telescope-fzf-native.nvim", build = "make" },
+	{ "nvim-treesitter/nvim-treesitter-context" },
+	{ "github/copilot.vim" },
 
 	-- Obsidian
 	{
@@ -423,17 +518,20 @@ require("obsidian").setup({
 		end,
 	},
 })
-require("conform").setup({
+local cfm = require("conform")
+cfm.setup({
 	formatters_by_ft = {
 		lua = { "stylua" },
 		-- Conform will run multiple formatters sequentially
-		python = { "isort", "black" },
+		python = { "isort" },
 		go = { "gofmt" },
 		-- Use a sub-list to run only the first available formatter
 		javascript = { { "prettierd", "prettier" } },
 		json = { "jq" },
 		yaml = { "yq" },
 		proto = { "buf" },
+		bash = { "beautysh" },
+		latex = { "latexindent" },
 		-- Use the "*" filetype to run formatters on all filetypes.
 		["*"] = { "codespell" },
 		-- Use the "_" filetype to run formatters on filetypes that don't
@@ -448,7 +546,11 @@ require("conform").setup({
 		return { timeout_ms = 500, lsp_fallback = true }
 	end,
 })
-
+-- vim.api.nvim_create_user_command("wf", function()
+-- 	cfm.format({})
+-- end, {
+-- 	desc = "Format file and write",
+-- })
 vim.api.nvim_create_user_command("FormatDisable", function(args)
 	if args.bang then
 		-- FormatDisable! will disable formatting just for this buffer
@@ -467,6 +569,13 @@ end, {
 	desc = "Re-enable autoformat-on-save",
 })
 
+-- require("lsp_signature").setup()
+require("ibl").setup({
+	scope = {
+		show_start = false,
+		show_end = false,
+	},
+})
 require("nvim-treesitter.configs").setup({
 	-- A list of parser names, or "all" (the five listed parsers should always be installed)
 	ensure_installed = {
@@ -493,10 +602,41 @@ require("nvim-treesitter.configs").setup({
 	-- parser_install_dir = "/some/path/to/store/parsers", -- Remember to run vim.opt.runtimepath:append("/some/path/to/store/parsers")!
 	highlight = { enable = true },
 })
+vim.keymap.set("n", "<leader>[", function()
+	require("treesitter-context").go_to_context(vim.v.count1)
+end, { silent = true })
 
 require("oil").setup()
 local harpoon = require("harpoon")
-harpoon:setup({})
+harpoon.setup({})
+-- harpoon keymaps
+vim.keymap.set("n", "<leader>a", function()
+	harpoon:list():add()
+end)
+vim.keymap.set("n", "<C-e>", function()
+	harpoon.ui:toggle_quick_menu(harpoon:list())
+end)
+
+vim.keymap.set("n", "<leader>h1", function()
+	harpoon:list():select(1)
+end)
+vim.keymap.set("n", "<leader>h2", function()
+	harpoon:list():select(2)
+end)
+vim.keymap.set("n", "<leader>h3", function()
+	harpoon:list():select(3)
+end)
+vim.keymap.set("n", "<leader>h4", function()
+	harpoon:list():select(4)
+end)
+
+-- Toggle previous & next buffers stored within Harpoon list
+vim.keymap.set("n", "<C-S-P>", function()
+	harpoon:list():prev()
+end)
+vim.keymap.set("n", "<C-S-N>", function()
+	harpoon:list():next()
+end)
 
 require("lualine").setup({
 	options = { theme = "auto" },
@@ -512,12 +652,54 @@ vim.keymap.set("n", "<leader>ff", builtin.find_files, {})
 vim.keymap.set("n", "<leader>fg", builtin.live_grep, {})
 vim.keymap.set("n", "<leader><leader>", builtin.buffers, {})
 vim.keymap.set("n", "<leader>fh", builtin.help_tags, {})
-vim.diagnostic.config({ virtual_text = false })
+vim.keymap.set("n", "<leader>gc", builtin.git_commits, {})
+vim.diagnostic.config({ virtual_text = false, float = { header = false, border = "rounded" } })
 
-vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float)
-vim.keymap.set("n", "<leader>ca", function()
-	vim.lsp.buf.code_action()
-end, { desc = "Show code actions" })
+vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float, { desc = "Open diagnostic" })
+vim.api.nvim_set_keymap(
+	"n",
+	"<leader>ca",
+	":Lspsaga code_action<CR>",
+	{ noremap = true, silent = true, desc = "Show code actions" }
+)
+vim.api.nvim_set_keymap(
+	"n",
+	"gd",
+	":Lspsaga peek_definition<CR>",
+	{ noremap = true, silent = true, desc = "Peek definition" }
+)
+vim.api.nvim_set_keymap(
+	"n",
+	"<leader>gd",
+	":Lspsaga goto_definition<CR>",
+	{ noremap = true, silent = true, desc = "Go to definition" }
+)
+vim.api.nvim_set_keymap(
+	"n",
+	"<leader>tt",
+	":Lspsaga term_toggle<CR>",
+	{ noremap = true, silent = true, desc = "Toggle terminal" }
+)
+vim.api.nvim_set_keymap(
+	"n",
+	"[d",
+	":Lspsaga diagnostic_jump_prev<CR>",
+	{ noremap = true, silent = true, desc = "Go to previous diagnostic" }
+)
+vim.api.nvim_set_keymap(
+	"n",
+	"]d",
+	":Lspsaga diagnostic_jump_next<CR>",
+	{ noremap = true, silent = true, desc = "Go to next diagnostic" }
+)
+vim.api.nvim_set_keymap(
+	"n",
+	"<leader>fr",
+	":Lspsaga finder<CR>",
+	{ noremap = true, silent = true, desc = "Find references" }
+)
+vim.api.nvim_set_keymap("n", "<leader>o", ":Oil<CR>", { noremap = true, silent = true, desc = "Open Oil" })
+-- vim.api.nvim_set_keymap("n", "K", ":Lspsaga hover_doc<CR>", { noremap = true, silent = true, desc = "Show doc" })
 
 -- To map <Esc> to exit terminal-mode: >vim
 vim.keymap.set("t", "<Esc>", "<C-\\><C-n>", {})
@@ -544,10 +726,17 @@ local luasnip = require("luasnip")
 luasnip.config.setup({})
 
 cmp.setup({
+	performance = {
+		max_view_entries = 20,
+	},
 	snippet = {
 		expand = function(args)
 			require("luasnip").lsp_expand(args.body) -- For `luasnip` users.
 		end,
+	},
+	window = {
+		completion = cmp.config.window.bordered(),
+		documentation = cmp.config.window.bordered(),
 	},
 	mapping = cmp.mapping.preset.insert({
 		["<C-b>"] = cmp.mapping.scroll_docs(-4),
