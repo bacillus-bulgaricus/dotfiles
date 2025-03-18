@@ -9,14 +9,6 @@ vim.keymap.set("v", "<leader>P", '"+P', { desc = "Paste before from clipboard" }
 vim.keymap.set("n", "<leader>p", '"+p', { desc = "Paste from clipboard" })
 vim.keymap.set("n", "<leader>P", '"+P', { desc = "Paste before from clipboard" })
 
--- Highlight on yank
-vim.api.nvim_create_autocmd("TextYankPost", {
-	callback = function()
-		vim.highlight.on_yank()
-	end,
-	desc = "Briefly highlight yanked text",
-})
-
 vim.keymap.set("n", "<leader>[", function()
 	require("treesitter-context").go_to_context(vim.v.count1)
 end, { silent = true })
