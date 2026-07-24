@@ -17,7 +17,7 @@ LOCAL_PACKAGES=(
 SUPERPOWERS_PACKAGE="git:github.com/obra/superpowers@v6.2.0"
 
 for pkg in "${LOCAL_PACKAGES[@]}"; do
-  npm install --omit=dev --package-lock=false --ignore-scripts --prefix "$pkg"
+  npm install --omit=dev --package-lock=false --ignore-scripts --legacy-peer-deps --prefix "$pkg"
 done
 
 installed="$(pi list)"

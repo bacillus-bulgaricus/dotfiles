@@ -1,14 +1,10 @@
 # pi-worktree-core
 
-Shared TypeScript helpers for local Pi worktree packages.
+Shared TypeScript helpers for the local Pi worktree packages. It intentionally registers no Pi resources.
 
-This package intentionally registers no Pi extension commands. It provides reusable helpers for:
+Exports:
 
-- worktree-safe slug generation
-- Pi-managed worktree path/branch planning
-- git worktree list parsing
-- repo discovery from `~/.pi/agent/worktree-manager.json`
-- Pi-managed worktree detection and removal command generation
-- tmux launch command generation for existing sessions and fresh task sessions
+- `pi-worktree-core/index` — repository discovery, worktree validation, cleanup safety, and tmux launch helpers;
+- `pi-worktree-core/fuzzy-select` — shared fuzzy filtering and interactive picker components.
 
-Consumers currently import it by relative path from sibling local packages.
+Sibling packages declare `pi-worktree-core` as a local file dependency rather than importing through repository-relative paths. This keeps module boundaries explicit while allowing the root npm workspace and chezmoi package installer to resolve the same source.

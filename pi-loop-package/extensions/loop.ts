@@ -96,7 +96,7 @@ export default function loopExtension(pi: ExtensionAPI): void {
 
 			if (raw === "stop") {
 				stopLoop("Stopped by user");
-				ctx.ui.notify("Loop stopped", "success");
+				ctx.ui.notify("Loop stopped", "info");
 				ctx.ui.setStatus("loop", undefined);
 				return;
 			}
@@ -121,7 +121,7 @@ export default function loopExtension(pi: ExtensionAPI): void {
 
 			startLoop(body, max);
 			ctx.ui.setStatus("loop", `loop ${state.iteration}/${state.maxIterations}`);
-			ctx.ui.notify(`Loop started (max ${state.maxIterations})`, "success");
+			ctx.ui.notify(`Loop started (max ${state.maxIterations})`, "info");
 			pi.sendUserMessage(body);
 		},
 	});

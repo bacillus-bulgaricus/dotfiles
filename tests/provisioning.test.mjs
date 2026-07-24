@@ -30,6 +30,7 @@ test('chezmoi excludes repository-only roots from the home target state', () => 
 
   assert.match(ignore, /^docs\/$/m);
   assert.match(ignore, /^tests\/$/m);
+  assert.match(ignore, /^scripts\/$/m);
   assert.match(ignore, /^pi-\*\/$/m);
 });
 
@@ -91,7 +92,7 @@ test('Pi and package installers are pinned and do not hide required failures', (
   const packageInstaller = repositoryFile('run_onchange_after_06-install-pi-packages.sh.tmpl');
   const claudeInstaller = repositoryFile('run_onchange_after_04-install-claude-plugins.sh.tmpl');
 
-  assert.match(piInstaller, /^PI_VERSION="0\.79\.8"$/m);
+  assert.match(piInstaller, /^PI_VERSION="0\.82\.0"$/m);
   assert.match(piInstaller, /@earendil-works\/pi-coding-agent@"\$PI_VERSION"/);
   assert.doesNotMatch(packageInstaller, /pi install .*\|\| true/);
   assert.doesNotMatch(packageInstaller, /command -v (?:pi|npm).*\|\| exit 0/);
@@ -104,7 +105,16 @@ test('Claude settings do not reference missing UI or bypass safety prompts', () 
   assert.equal(settings.statusLine, undefined);
   assert.equal(settings.sandbox.autoAllowBashIfSandboxed, false);
   assert.equal(settings.skipAutoPermissionPrompt, false);
-  assert.equal(settings.permissions.allow.includes('Bash(find:*)'), false);
+  for (const permission of [
+    'Bash(find:*)',
+    'Bash(git add:*)',
+    'Bash(git commit:*)',
+    'Bash(git merge:*)',
+    'Bash(git pull:*)',
+    'Bash(git restore:*)',
+  ]) {
+    assert.equal(settings.permissions.allow.includes(permission), false, `${permission} should require confirmation`);
+  }
 });
 
 test('zsh and tmux integrations are guarded and portable', () => {

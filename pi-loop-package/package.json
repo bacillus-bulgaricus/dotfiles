@@ -12,7 +12,7 @@
     "typebox": "*"
   },
   "devDependencies": {
-    "jiti": "*"
+    "jiti": "2.7.0"
   },
   "pi": {
     "extensions": ["./extensions/loop.ts"]

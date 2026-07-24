@@ -6,6 +6,10 @@
     "test": "node --test tests/*.test.mjs"
   },
   "keywords": ["pi-package", "worktree"],
+  "exports": {
+    "./index": "./src/index.ts",
+    "./fuzzy-select": "./src/fuzzy-select.ts"
+  },
   "pi": {
     "extensions": [],
     "skills": [],
@@ -17,6 +21,6 @@
     "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
-    "jiti": "*"
+    "jiti": "2.7.0"
   }
 }

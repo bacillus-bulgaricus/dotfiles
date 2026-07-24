@@ -3,7 +3,7 @@ import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 
-export type WorktreeEntry = { path: string; name: string; branch?: string };
+export type WorktreeEntry = { path: string; name: string; branch: string | undefined };
 export type RepoCandidate = { alias: string; root: string };
 export type WorktreeManagerConfig = { repoSearchRoots: string[] };
 export type WorktreePlan = { repoRoot: string; name: string; branch: string; path: string };
@@ -51,22 +51,20 @@ export function shellQuote(input: string): string {
 }
 
 export function parseWorktreeList(porcelain: string): WorktreeEntry[] {
-	return porcelain
-		.split(/\n\s*\n/)
-		.map((block) => block.trim())
-		.filter(Boolean)
-		.map((block) => {
-			const lines = block.split(/\n/);
-			const worktreeLine = lines.find((line) => line.startsWith("worktree "));
-			if (!worktreeLine) return undefined;
+	const entries: WorktreeEntry[] = [];
+	for (const rawBlock of porcelain.split(/\n\s*\n/)) {
+		const block = rawBlock.trim();
+		if (!block) continue;
+		const lines = block.split(/\n/);
+		const worktreeLine = lines.find((line) => line.startsWith("worktree "));
+		if (!worktreeLine) continue;
 
-			const path = worktreeLine.slice("worktree ".length);
-			const branchLine = lines.find((line) => line.startsWith("branch "));
-			const branchRef = branchLine?.slice("branch ".length);
-			const branch = branchRef?.replace(/^refs\/heads\//, "");
-			return { path, name: basename(path), branch };
-		})
-		.filter((entry): entry is WorktreeEntry => entry !== undefined);
+		const path = worktreeLine.slice("worktree ".length);
+		const branchRef = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length);
+		const branch = branchRef?.replace(/^refs\/heads\//, "");
+		entries.push({ path, name: basename(path), branch });
+	}
+	return entries;
 }
 
 export function tmuxLaunchCommand(info: { name: string; path: string; insideTmux?: boolean }): {

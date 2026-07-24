@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 function pkg(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
@@ -25,7 +25,17 @@ test('local pi extension packages declare runtime peer dependencies they import'
   }
 });
 
-test('packages with TypeScript-importing tests declare jiti as a dev dependency', () => {
+test('Pi worktree consumers declare the shared core package explicitly', () => {
+  for (const path of [
+    'pi-worktree-manager/package.json',
+    'pi-task/package.json',
+    'pi-claude-bridge/package.json',
+  ]) {
+    assert.equal(pkg(path).dependencies?.['pi-worktree-core'], 'file:../pi-worktree-core');
+  }
+});
+
+test('packages with TypeScript-importing tests pin jiti as a dev dependency', () => {
   for (const path of [
     'pi-worktree-core/package.json',
     'pi-worktree-manager/package.json',
@@ -34,7 +44,7 @@ test('packages with TypeScript-importing tests declare jiti as a dev dependency'
     'pi-claude-bridge/package.json',
   ]) {
     const devDeps = pkg(path).devDependencies ?? {};
-    assert.equal(devDeps.jiti, '*', `${path} should declare jiti for tests that import TypeScript`);
+    assert.equal(devDeps.jiti, '2.7.0', `${path} should pin jiti for tests that import TypeScript`);
   }
 });
 
@@ -70,6 +80,7 @@ test('pi package installer separates local npm packages from managed git package
   );
   assert.match(script, /npm install --omit=dev/, 'installer should install local package dependencies');
   assert.match(script, /--package-lock=false/, 'installer should avoid package-lock files');
+  assert.match(script, /--legacy-peer-deps/, 'installer should use Pi-bundled peer dependencies');
   assert.match(script, /for pkg in "\$\{LOCAL_PACKAGES\[@\]\}"/, 'local loops should only receive local package paths');
   assert.match(
     script,
@@ -85,4 +96,55 @@ test('shell environment disables optional Superpowers visual telemetry', () => {
   const shell = readFileSync('.chezmoitemplates/zshrc', 'utf8');
 
   assert.match(shell, /^export SUPERPOWERS_DISABLE_TELEMETRY=1$/m);
+});
+
+test('root workspace defines reproducible aggregate validation', () => {
+  assert.equal(existsSync('package-lock.json'), true, 'root package lock should be committed');
+  const root = pkg('package.json');
+
+  assert.deepEqual(root.workspaces, [
+    'pi-worktree-core',
+    'pi-worktree-manager',
+    'pi-task',
+    'pi-loop-package',
+    'pi-claude-bridge',
+  ]);
+  for (const script of ['test', 'typecheck', 'lint:shell', 'check']) {
+    assert.equal(typeof root.scripts?.[script], 'string', `root should define npm run ${script}`);
+  }
+  assert.match(root.devDependencies?.jiti ?? '', /^\d+\.\d+\.\d+$/);
+  assert.match(root.devDependencies?.typescript ?? '', /^\d+\.\d+\.\d+$/);
+});
+
+test('every local Pi package has a runnable test script', () => {
+  for (const path of [
+    'pi-worktree-core/package.json',
+    'pi-worktree-manager/package.json',
+    'pi-task/package.json',
+    'pi-loop-package/package.json',
+    'pi-claude-bridge/package.json',
+  ]) {
+    assert.equal(pkg(path).scripts?.test, 'node --test tests/*.test.mjs', `${path} should run Node tests`);
+  }
+});
+
+test('CI runs clean-install tests typechecking and repository checks', () => {
+  const workflow = readFileSync('.github/workflows/check.yml', 'utf8');
+
+  for (const command of ['npm ci', 'npm test', 'npm run typecheck', 'npm run lint:shell', 'npm run check']) {
+    assert.match(workflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+});
+
+test('README documents canonical installation and delegation safety', () => {
+  const readme = readFileSync('README.md', 'utf8');
+
+  assert.match(readme, /\.\/install\.sh/);
+  assert.match(readme, /headless Pi/i);
+  assert.match(readme, /never force-removes/i);
+});
+
+test('nvim-pack-lock is the sole Neovim plugin lockfile', () => {
+  assert.equal(existsSync('dot_config/nvim/nvim-pack-lock.json'), true);
+  assert.equal(existsSync('dot_config/nvim/lazy-lock.json'), false);
 });

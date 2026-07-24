@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
-import { complete } from "@earendil-works/pi-ai";
+import { complete } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
@@ -14,7 +14,7 @@ import {
 	slugify,
 	tmuxPiLaunchCommand,
 	type RepoCandidate,
-} from "../../pi-worktree-core/src/index";
+} from "pi-worktree-core/index";
 
 export type TaskConfig = { model?: string; warnings: string[] };
 export type InferredTask = {
@@ -35,7 +35,7 @@ type MinimalTaskContext = {
 		getApiKeyAndHeaders: (model: any) => Promise<{ ok: true; apiKey?: string; headers?: Record<string, string> } | { ok: false; error: string }>;
 	};
 	ui: {
-		notify: (message: string, level?: "info" | "success" | "warning" | "error") => void;
+		notify: (message: string, level?: "info" | "warning" | "error") => void;
 		confirm?: (title: string, message: string) => Promise<boolean>;
 		custom: <T>(factory: (tui: { requestRender: () => void }, theme: any, keybindings: unknown, done: (value: T) => void) => any) => Promise<T>;
 		input: (title: string, placeholder?: string) => Promise<string | undefined>;
@@ -113,11 +113,15 @@ export function parseTaskInference(text: string): InferredTask {
 			throw new Error(`Task inference missing ${key}`);
 		}
 	}
+	const { repoAlias, goal, worktreeName, kickoffPrompt } = parsed;
+	if (!repoAlias || !goal || !worktreeName || !kickoffPrompt) {
+		throw new Error("Task inference did not contain complete string fields");
+	}
 	return {
-		repoAlias: parsed.repoAlias.trim(),
-		goal: parsed.goal.trim(),
-		worktreeName: slugify(parsed.worktreeName.trim()),
-		kickoffPrompt: parsed.kickoffPrompt.trim(),
+		repoAlias: repoAlias.trim(),
+		goal: goal.trim(),
+		worktreeName: slugify(worktreeName.trim()),
+		kickoffPrompt: kickoffPrompt.trim(),
 		...(typeof parsed.baseRef === "string" && parsed.baseRef.trim() ? { baseRef: parsed.baseRef.trim() } : {}),
 	};
 }
@@ -290,7 +294,7 @@ async function runTaskCommand(args: string, ctx: MinimalTaskContext): Promise<vo
 		const worktree = ensureWorktree(repo.root, inferred.worktreeName, { baseRef: inferred.baseRef, defaultBase: "remoteDefault" });
 		const launch = buildTaskLaunchCommand(worktree, kickoffPrompt, { split: parsedArgs.split, insideTmux: Boolean(process.env.TMUX) });
 		execFileSync(launch.command, launch.args, { encoding: "utf8" });
-		ctx.ui.notify(`${worktree.created ? "Created" : "Using"} ${repo.alias} / ${worktree.name}. ${launch.description}`, "success");
+		ctx.ui.notify(`${worktree.created ? "Created" : "Using"} ${repo.alias} / ${worktree.name}. ${launch.description}`, "info");
 	} catch (error) {
 		ctx.ui.notify(`Task launch failed: ${errorText(error)}`, "error");
 	}

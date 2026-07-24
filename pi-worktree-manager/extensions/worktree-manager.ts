@@ -3,7 +3,7 @@ import { basename, join, normalize } from "node:path";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { actionPicker, textInput } from "../../pi-worktree-core/src/fuzzy-select";
+import { actionPicker, textInput } from "pi-worktree-core/fuzzy-select";
 import {
 	discoverRepositories,
 	ensureWorktree,
@@ -24,7 +24,7 @@ import {
 	type WorktreeEntry,
 	type WorktreeManagerConfig,
 	type WorktreePickerEntry,
-} from "../../pi-worktree-core/src/index";
+} from "pi-worktree-core/index";
 
 export {
 	discoverRepositories,
@@ -57,7 +57,7 @@ type MinimalCommandContext = {
 	mode: "tui" | "rpc" | "json" | "print";
 	hasUI?: boolean;
 	ui: {
-		notify: (message: string, level?: "info" | "success" | "warning" | "error") => void;
+		notify: (message: string, level?: "info" | "warning" | "error") => void;
 		confirm: (title: string, message: string) => Promise<boolean>;
 		custom: <T>(factory: (tui: { requestRender: () => void }, theme: any, keybindings: unknown, done: (value: T) => void) => any) => Promise<T>;
 		input: (title: string, placeholder?: string) => Promise<string | undefined>;
@@ -67,7 +67,7 @@ type MinimalCommandContext = {
 function launchTmux(info: { name: string; path: string }, ctx: MinimalCommandContext): void {
 	const launch = tmuxLaunchCommand({ name: info.name, path: info.path, insideTmux: Boolean(process.env.TMUX) });
 	execFileSync(launch.command, launch.args, { encoding: "utf8" });
-	ctx.ui.notify(launch.description, "success");
+	ctx.ui.notify(launch.description, "info");
 }
 
 function listWorktreesForRepos(repos: RepoCandidate[], ctx: MinimalCommandContext): WorktreePickerEntry[] {
@@ -116,7 +116,7 @@ async function createWorktreeFlow(repos: RepoCandidate[], ctx: MinimalCommandCon
 
 	try {
 		const info = ensureWorktree(repo.root, rawName);
-		ctx.ui.notify(`${info.created ? "Created" : "Using"} ${repo.alias} / ${info.name}`, "success");
+		ctx.ui.notify(`${info.created ? "Created" : "Using"} ${repo.alias} / ${info.name}`, "info");
 		launchTmux({ name: info.name, path: info.path }, ctx);
 	} catch (error) {
 		ctx.ui.notify(`Create failed: ${errorText(error)}`, "error");
@@ -145,7 +145,7 @@ async function deleteWorktree(entry: WorktreePickerEntry, ctx: MinimalCommandCon
 	try {
 		runGit(entry.repo.root, commands.safe);
 		deleteManagedBranch(entry.repo.root, entry.managed.branch, ctx);
-		ctx.ui.notify(`Removed ${entry.label}`, "success");
+		ctx.ui.notify(`Removed ${entry.label}`, "info");
 		return;
 	} catch (error) {
 		const failure = errorText(error);
@@ -159,7 +159,7 @@ async function deleteWorktree(entry: WorktreePickerEntry, ctx: MinimalCommandCon
 	try {
 		runGit(entry.repo.root, commands.force);
 		deleteManagedBranch(entry.repo.root, entry.managed.branch, ctx);
-		ctx.ui.notify(`Force-removed ${entry.label}`, "success");
+		ctx.ui.notify(`Force-removed ${entry.label}`, "info");
 	} catch (error) {
 		ctx.ui.notify(`Force removal failed: ${errorText(error)}`, "error");
 	}
@@ -243,7 +243,7 @@ async function cleanupCurrentManagedWorktree(event: { reason?: string }, ctx: Mi
 
 	try {
 		runGit(repoRoot, worktreeRemovalCommands(managed.path).safe);
-		ctx.ui.notify(`Removed worktree ${managed.name}; preserved branch ${managed.branch}`, "success");
+		ctx.ui.notify(`Removed worktree ${managed.name}; preserved branch ${managed.branch}`, "info");
 	} catch (error) {
 		ctx.ui.notify(`Safe worktree cleanup failed; worktree and branch were preserved: ${errorText(error)}`, "error");
 	}
