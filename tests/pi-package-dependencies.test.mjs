@@ -12,7 +12,7 @@ test('local pi extension packages declare runtime peer dependencies they import'
   const expected = {
     'pi-worktree-manager/package.json': ['@earendil-works/pi-coding-agent', '@earendil-works/pi-tui'],
     'pi-task/package.json': ['@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', '@earendil-works/pi-tui', 'typebox'],
-    'pi-loop-package/package.json': ['@earendil-works/pi-coding-agent', 'typebox'],
+    'pi-loop-package/package.json': ['@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', 'typebox'],
     'pi-claude-bridge/package.json': ['@earendil-works/pi-coding-agent', '@earendil-works/pi-tui'],
   };
 
@@ -29,6 +29,7 @@ test('packages with TypeScript-importing tests declare jiti as a dev dependency'
     'pi-worktree-core/package.json',
     'pi-worktree-manager/package.json',
     'pi-task/package.json',
+    'pi-loop-package/package.json',
     'pi-claude-bridge/package.json',
   ]) {
     const devDeps = pkg(path).devDependencies ?? {};
