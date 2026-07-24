@@ -311,7 +311,6 @@ export function ensureWorktree(repoRoot: string, rawName?: string, options: Ensu
 	const plan = ensureWorktreePlan(repoRoot, rawName);
 	mkdirSync(dirname(plan.path), { recursive: true });
 
-	const baseRef = resolveWorktreeBaseRef(repoRoot, options);
 	let created = false;
 	if (existsSync(plan.path)) {
 		const existing = parseWorktreeList(runGit(repoRoot, ["worktree", "list", "--porcelain"]))
@@ -320,6 +319,7 @@ export function ensureWorktree(repoRoot: string, rawName?: string, options: Ensu
 			throw new Error(`${plan.path} exists but is not the expected git worktree on ${plan.branch}`);
 		}
 	} else {
+		const baseRef = resolveWorktreeBaseRef(repoRoot, options);
 		runGit(repoRoot, ["worktree", "add", "-b", plan.branch, plan.path, baseRef]);
 		created = true;
 	}

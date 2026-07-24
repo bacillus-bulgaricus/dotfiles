@@ -204,6 +204,17 @@ test('ensureWorktree rejects an existing path that is not a registered worktree'
   );
 });
 
+test('ensureWorktree reuses an existing worktree without fetching its base again', () => {
+  const { repo } = makeRepoWithRemote();
+  core.ensureWorktree(repo, 'offline-reuse', { baseRef: 'main' });
+  git(repo, ['remote', 'remove', 'origin']);
+
+  const reused = core.ensureWorktree(repo, 'offline-reuse', { defaultBase: 'remoteDefault' });
+
+  assert.equal(reused.created, false);
+  assert.equal(reused.branch, 'worktree-offline-reuse');
+});
+
 test('ensureWorktree reuses only a registered worktree on the expected branch', () => {
   const { repo } = makeRepoWithRemote();
   const created = core.ensureWorktree(repo, 'reusable', { baseRef: 'main' });

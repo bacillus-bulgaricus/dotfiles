@@ -3,6 +3,10 @@ bootstrap.sh
 install.sh
 doctor.sh
 Makefile
+README.md
+package.json
+package-lock.json
+tsconfig.json
 .gitignore
 ghostty/
 docs/
