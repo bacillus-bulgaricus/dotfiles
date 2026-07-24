@@ -50,12 +50,19 @@ test('pi package installer separates local npm packages from managed git package
   const script = readFileSync('run_onchange_after_06-install-pi-packages.sh.tmpl', 'utf8');
 
   assert.match(script, /LOCAL_PACKAGES=\(/, 'installer should declare local packages separately');
-  assert.match(script, /PI_PACKAGES=\(/, 'installer should declare all Pi packages');
-  assert.match(script, /git:github\.com\/obra\/superpowers@v6\.2\.0/, 'installer should register pinned upstream Superpowers');
+  assert.match(
+    script,
+    /SUPERPOWERS_PACKAGE="git:github\.com\/obra\/superpowers@v6\.2\.0"/,
+    'installer should declare pinned upstream Superpowers separately',
+  );
   assert.match(script, /npm install --omit=dev/, 'installer should install local package dependencies');
   assert.match(script, /--package-lock=false/, 'installer should avoid package-lock files');
-  assert.match(script, /for pkg in "\$\{LOCAL_PACKAGES\[@\]\}"/, 'npm loop should only receive local package paths');
-  assert.match(script, /for pkg in "\$\{PI_PACKAGES\[@\]\}"/, 'Pi registration loop should receive all packages');
+  assert.match(script, /for pkg in "\$\{LOCAL_PACKAGES\[@\]\}"/, 'local loops should only receive local package paths');
+  assert.match(
+    script,
+    /pi install "\$SUPERPOWERS_PACKAGE"/,
+    'installer should reconcile the configured git package even when pi list already reports it',
+  );
 
   const npmLoop = script.match(/for pkg in "\$\{LOCAL_PACKAGES\[@\]\}"; do([\s\S]*?)done/)?.[1] ?? '';
   assert.doesNotMatch(npmLoop, /superpowers/, 'upstream git source must not be passed to npm --prefix');
@@ -78,7 +85,7 @@ Run:
 node --test tests/pi-package-dependencies.test.mjs
 ```
 
-Expected: failures report that settings still contain the local port, the installer lacks `LOCAL_PACKAGES`/`PI_PACKAGES`, and the telemetry export is absent.
+Expected: failures report that settings still contain the local port, the installer lacks `LOCAL_PACKAGES`/`SUPERPOWERS_PACKAGE`, and the telemetry export is absent.
 
 ### Task 2: Switch configuration to native upstream Superpowers
 
@@ -116,21 +123,22 @@ LOCAL_PACKAGES=(
   "{{ .chezmoi.sourceDir }}/pi-claude-bridge"
 )
 
-PI_PACKAGES=(
-  "${LOCAL_PACKAGES[@]}"
-  "git:github.com/obra/superpowers@v6.2.0"
-)
+SUPERPOWERS_PACKAGE="git:github.com/obra/superpowers@v6.2.0"
 
 for pkg in "${LOCAL_PACKAGES[@]}"; do
   npm install --omit=dev --package-lock=false --ignore-scripts --prefix "$pkg"
 done
 
 installed="$(pi list 2>/dev/null || true)"
-for pkg in "${PI_PACKAGES[@]}"; do
+for pkg in "${LOCAL_PACKAGES[@]}"; do
   if ! grep -Fq -- "$pkg" <<<"$installed"; then
     pi install "$pkg" || true
   fi
 done
+
+# pi list includes configured git sources even when their clones are absent, so
+# always let pi install reconcile the immutable pinned package.
+pi install "$SUPERPOWERS_PACKAGE" || true
 ```
 
 This keeps the existing best-effort Pi registration policy while ensuring npm `--prefix` only receives filesystem paths.
