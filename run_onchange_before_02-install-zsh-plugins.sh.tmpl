@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Pinned fallback plugin revisions; update deliberately.
+set -euo pipefail
+
+command -v git >/dev/null 2>&1 || { echo "git is required to install zsh plugins" >&2; exit 1; }
+
+ZSH_DIR="$HOME/.zsh"
+mkdir -p "$ZSH_DIR"
+
+reconcile_plugin() {
+  local name="$1"
+  local url="$2"
+  local revision="$3"
+  local destination="$ZSH_DIR/$name"
+
+  if [[ -e "$destination" && ! -d "$destination/.git" ]]; then
+    echo "$destination exists but is not a git checkout" >&2
+    return 1
+  fi
+  if [[ ! -d "$destination/.git" ]]; then
+    git clone --filter=blob:none "$url" "$destination"
+  fi
+  git -C "$destination" fetch --quiet origin "$revision"
+  git -C "$destination" checkout --quiet --detach "$revision"
+}
+
+# Homebrew provides these on full installations; keep pinned fallbacks for
+# environments where Homebrew is intentionally unavailable.
+if ! command -v brew >/dev/null 2>&1; then
+  reconcile_plugin zsh-autosuggestions https://github.com/zsh-users/zsh-autosuggestions.git 85919cd1ffa7d2d5412f6d3fe437ebdbeeec4fc5
+  reconcile_plugin zsh-syntax-highlighting https://github.com/zsh-users/zsh-syntax-highlighting.git 1d85c692615a25fe2293bdd44b34c217d5d2bf04
+fi
+
+reconcile_plugin fzf-tab https://github.com/Aloxaf/fzf-tab.git 24105b15714bfec37989ed5c5b6e60f572253019

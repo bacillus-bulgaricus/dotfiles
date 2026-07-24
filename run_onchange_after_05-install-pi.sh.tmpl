@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Install/update Pi Coding Agent using the upstream-recommended npm package.
+# Install the reviewed Pi Coding Agent version. Update PI_VERSION deliberately.
 # Re-runs whenever this script changes (chezmoi onchange).
 set -euo pipefail
 
-command -v npm >/dev/null 2>&1 || exit 0
+PI_VERSION="0.79.8"
 
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent
+command -v npm >/dev/null 2>&1 || { echo "npm is required to install Pi" >&2; exit 1; }
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@"$PI_VERSION"

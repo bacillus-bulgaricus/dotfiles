@@ -37,9 +37,9 @@ fi
 
 printf "\n== claude hooks ==\n"
 if [[ -x "$HOME/.claude/hooks/ssh-agent-check.sh" ]]; then
-    ok "~/.claude/hooks/ssh-agent-check.sh is executable"
+    ok "$HOME/.claude/hooks/ssh-agent-check.sh is executable"
 else
-    bad "~/.claude/hooks/ssh-agent-check.sh missing or not executable"
+    bad "$HOME/.claude/hooks/ssh-agent-check.sh missing or not executable"
 fi
 
 printf "\n== ssh agent ==\n"
@@ -61,16 +61,16 @@ printf "\n== json templates render ==\n"
 if command -v chezmoi >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
     repo=$(cd "$(dirname "$0")" && pwd)
     any=0
-    for f in "$repo"/dot_claude/*.json.tmpl "$repo"/dot_claude/**/*.json.tmpl; do
+    for f in "$repo"/dot_claude/*.json.tmpl "$repo"/dot_claude/**/*.json.tmpl "$repo"/dot_pi/**/*.json.tmpl; do
         [[ -e "$f" ]] || continue
         any=1
         if chezmoi execute-template < "$f" | jq -e . >/dev/null 2>&1; then
-            ok "renders: ${f#$repo/}"
+            ok "renders: ${f#"$repo"/}"
         else
-            bad "broken:  ${f#$repo/}"
+            bad "broken:  ${f#"$repo"/}"
         fi
     done
-    [[ $any -eq 0 ]] && warn "no dot_claude/**/*.json.tmpl files found"
+    [[ $any -eq 0 ]] && warn "no JSON templates found"
 else
     warn "chezmoi or jq missing — skipping template render checks"
 fi

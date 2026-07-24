@@ -39,12 +39,10 @@ awk -v begin="$begin_marker" -v end="$end_marker" '
   !in_block {print}
 ' "$config_file" > "$tmp_file"
 
-{
-  [[ -s "$tmp_file" ]] && echo
-  echo "$begin_marker"
-  echo "$managed_include"
-  echo "$end_marker"
-} >> "$tmp_file"
+if [[ -s "$tmp_file" ]]; then
+  printf '\n' >> "$tmp_file"
+fi
+printf '%s\n%s\n%s\n' "$begin_marker" "$managed_include" "$end_marker" >> "$tmp_file"
 
 chmod 600 "$tmp_file"
 mv -f "$tmp_file" "$config_file"
