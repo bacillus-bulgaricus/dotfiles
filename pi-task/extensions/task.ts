@@ -4,7 +4,6 @@ import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { complete } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
 import {
@@ -17,7 +16,7 @@ import {
 	type RepoCandidate,
 } from "../../pi-worktree-core/src/index";
 
-export type TaskConfig = { model?: string; tool?: { requireConfirmation?: boolean }; warnings: string[] };
+export type TaskConfig = { model?: string; warnings: string[] };
 export type InferredTask = {
 	repoAlias: string;
 	goal: string;
@@ -26,19 +25,10 @@ export type InferredTask = {
 	baseRef?: string;
 };
 export type TaskArgs = { request: string; split: boolean };
-export type TaskToolParams = {
-	description: string;
-	split?: boolean;
-	repoAlias?: string;
-	worktreeName?: string;
-	kickoffPrompt?: string;
-	baseRef?: string;
-	requireConfirmation?: boolean;
-};
 
 type MinimalTaskContext = {
 	cwd: string;
-	hasUI?: boolean;
+	mode: "tui" | "rpc" | "json" | "print";
 	model?: any;
 	modelRegistry: {
 		find?: (provider: string, model: string) => any;
@@ -65,24 +55,12 @@ export function parseTaskConfig(raw: string): TaskConfig {
 
 	const warnings: string[] = [];
 	const config: TaskConfig = { warnings };
-	const input = parsed as { model?: unknown; tool?: unknown };
+	const input = parsed as { model?: unknown };
 	if (input.model !== undefined) {
 		if (typeof input.model !== "string" || !input.model.includes("/")) {
 			warnings.push("model must be a provider/model string");
 		} else {
 			config.model = input.model;
-		}
-	}
-	if (input.tool !== undefined) {
-		if (!input.tool || typeof input.tool !== "object" || Array.isArray(input.tool)) {
-			warnings.push("tool must be an object");
-		} else {
-			const tool = input.tool as { requireConfirmation?: unknown };
-			if (tool.requireConfirmation !== undefined && typeof tool.requireConfirmation !== "boolean") {
-				warnings.push("tool.requireConfirmation must be a boolean");
-			} else if (tool.requireConfirmation !== undefined) {
-				config.tool = { requireConfirmation: tool.requireConfirmation };
-			}
 		}
 	}
 	return config;
@@ -102,21 +80,6 @@ export function parseTaskArgs(args: string): TaskArgs {
 	return {
 		split,
 		request: pieces.filter((piece) => piece !== "--split").join(" "),
-	};
-}
-
-export function taskToolRequiresConfirmation(config: TaskConfig, params: { requireConfirmation?: boolean }): boolean {
-	return params.requireConfirmation ?? config.tool?.requireConfirmation ?? true;
-}
-
-export function explicitTaskFromToolParams(params: Partial<TaskToolParams>): InferredTask | undefined {
-	if (!params.description || !params.repoAlias || !params.worktreeName || !params.kickoffPrompt) return undefined;
-	return {
-		repoAlias: params.repoAlias.trim(),
-		goal: params.description.trim(),
-		worktreeName: slugify(params.worktreeName.trim()),
-		kickoffPrompt: params.kickoffPrompt.trim(),
-		...(params.baseRef?.trim() ? { baseRef: params.baseRef.trim() } : {}),
 	};
 }
 
@@ -265,16 +228,6 @@ async function maybeEditTask(ctx: MinimalTaskContext, task: InferredTask, kickof
 	return { task: { ...task, worktreeName: slugify(name) }, kickoffPrompt: prompt };
 }
 
-function applyTaskToolOverrides(task: InferredTask, params: TaskToolParams): InferredTask {
-	return {
-		repoAlias: params.repoAlias?.trim() || task.repoAlias,
-		goal: task.goal,
-		worktreeName: params.worktreeName ? slugify(params.worktreeName) : task.worktreeName,
-		kickoffPrompt: params.kickoffPrompt?.trim() || task.kickoffPrompt,
-		...(params.baseRef?.trim() ? { baseRef: params.baseRef.trim() } : task.baseRef ? { baseRef: task.baseRef } : {}),
-	};
-}
-
 async function discoverTaskRepositories(ctx: MinimalTaskContext): Promise<{ config: TaskConfig; repos: RepoCandidate[] }> {
 	const taskConfig = loadTaskConfig();
 	for (const warning of taskConfig.warnings) ctx.ui.notify(warning, "warning");
@@ -285,23 +238,12 @@ async function discoverTaskRepositories(ctx: MinimalTaskContext): Promise<{ conf
 	return { config: taskConfig, repos: discovered.repos };
 }
 
-async function launchResolvedTask(input: {
-	request: string;
-	split: boolean;
-	task: InferredTask;
-	repos: RepoCandidate[];
-	ctx: MinimalTaskContext;
-}): Promise<{ repo: RepoCandidate; worktree: { name: string; path: string; branch: string; created: boolean }; launchDescription: string; kickoffPrompt: string }> {
-	const repo = input.repos.find((candidate) => candidate.alias === input.task.repoAlias);
-	if (!repo) throw new Error(`Inferred repo not found: ${input.task.repoAlias}`);
-	const kickoffPrompt = buildKickoffPrompt({ originalRequest: input.request, repo, goal: input.task.goal, kickoffPrompt: input.task.kickoffPrompt, baseRef: input.task.baseRef });
-	const worktree = ensureWorktree(repo.root, input.task.worktreeName, { baseRef: input.task.baseRef, defaultBase: "remoteDefault" });
-	const launch = buildTaskLaunchCommand(worktree, kickoffPrompt, { split: input.split, insideTmux: Boolean(process.env.TMUX) });
-	execFileSync(launch.command, launch.args, { encoding: "utf8" });
-	return { repo, worktree, launchDescription: launch.description, kickoffPrompt };
-}
-
 async function runTaskCommand(args: string, ctx: MinimalTaskContext): Promise<void> {
+	if (ctx.mode !== "tui") {
+		ctx.ui.notify("/task is available only in interactive TUI mode", "error");
+		return;
+	}
+
 	const parsedArgs = parseTaskArgs(args);
 	const request = parsedArgs.request;
 	if (!request) {
@@ -354,65 +296,7 @@ async function runTaskCommand(args: string, ctx: MinimalTaskContext): Promise<vo
 	}
 }
 
-async function runTaskTool(params: TaskToolParams, ctx: MinimalTaskContext): Promise<{ text: string; details: Record<string, unknown> }> {
-	const request = params.description.trim();
-	if (!request) throw new Error("description is required");
-
-	const discovered = await discoverTaskRepositories(ctx);
-	if (discovered.repos.length === 0) throw new Error("No repos found. Configure ~/.pi/agent/worktree-manager.json or run from a git repo.");
-
-	let task = explicitTaskFromToolParams(params);
-	if (!task) {
-		task = applyTaskToolOverrides(await inferTask(request, discovered.repos, discovered.config, ctx), params);
-	}
-
-	const repo = discovered.repos.find((candidate) => candidate.alias === task.repoAlias);
-	if (!repo) throw new Error(`Task repo not found: ${task.repoAlias}`);
-	const kickoffPrompt = buildKickoffPrompt({ originalRequest: request, repo, goal: task.goal, kickoffPrompt: task.kickoffPrompt, baseRef: task.baseRef });
-	if (taskToolRequiresConfirmation(discovered.config, params)) {
-		if (!ctx.hasUI || !ctx.ui.confirm) throw new Error("Task launch requires UI confirmation");
-		const ok = await ctx.ui.confirm("Launch task?", `Repo: ${repo.alias}\nWorktree: ${task.worktreeName}\nBase: ${task.baseRef ?? "latest default branch"}\nGoal: ${task.goal}`);
-		if (!ok) return { text: "Task launch cancelled", details: { cancelled: true } };
-	}
-
-	const launched = await launchResolvedTask({ request, split: params.split === true, task, repos: discovered.repos, ctx });
-	return {
-		text: `${launched.worktree.created ? "Created" : "Using"} ${launched.repo.alias} / ${launched.worktree.name}. ${launched.launchDescription}`,
-		details: {
-			repo: launched.repo,
-			worktree: launched.worktree,
-			launchDescription: launched.launchDescription,
-		},
-	};
-}
-
 export default function taskExtension(pi: ExtensionAPI): void {
-	pi.registerTool({
-		name: "task",
-		label: "Task",
-		description: "Start a fresh Pi task session in a Pi-managed git worktree",
-		promptSnippet: "Start a fresh Pi task session in a new Pi-managed worktree for handoff work",
-		promptGuidelines: [
-			"Use the task tool when handing off a separable task to a fresh Pi session instead of asking the user to run /task manually.",
-		],
-		parameters: Type.Object({
-			description: Type.String({ description: "Freeform task description to hand off" }),
-			split: Type.Optional(Type.Boolean({ description: "Open in a tmux split pane when already inside tmux" })),
-			repoAlias: Type.Optional(Type.String({ description: "Optional known repo alias to use directly" })),
-			worktreeName: Type.Optional(Type.String({ description: "Optional worktree name to use directly" })),
-			kickoffPrompt: Type.Optional(Type.String({ description: "Optional detailed prompt for the new Pi session" })),
-			baseRef: Type.Optional(Type.String({ description: "Optional explicit branch, tag, or commit to base the task worktree on. If omitted, the latest remote default branch is used." })),
-			requireConfirmation: Type.Optional(Type.Boolean({ description: "Override task.json tool.requireConfirmation for this call" })),
-		}),
-		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const result = await runTaskTool(params as TaskToolParams, ctx as MinimalTaskContext);
-			return {
-				content: [{ type: "text", text: result.text }],
-				details: result.details,
-			};
-		},
-	});
-
 	pi.registerCommand("task", {
 		description: "Infer a task, create a Pi worktree, and launch a fresh Pi tmux session",
 		handler: async (args, ctx) => {
