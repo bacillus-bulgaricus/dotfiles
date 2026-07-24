@@ -12,13 +12,13 @@ import {
 	forceRemovalPrompt,
 	identifyPiManagedWorktree,
 	identifyPiManagedWorktreeForRepo,
+	isCleanWorktreeStatus,
 	managingRepoRootForWorktree,
 	parseWorktreeList,
 	parseWorktreeManagerConfig,
 	runGit,
 	tmuxLaunchCommand,
 	worktreePickerEntries,
-	worktreeCleanupCommands,
 	worktreeRemovalCommands,
 	type RepoCandidate,
 	type WorktreeEntry,
@@ -32,12 +32,12 @@ export {
 	forceRemovalPrompt,
 	identifyPiManagedWorktree,
 	identifyPiManagedWorktreeForRepo,
+	isCleanWorktreeStatus,
 	managingRepoRootForWorktree,
 	parseWorktreeList,
 	parseWorktreeManagerConfig,
 	tmuxLaunchCommand,
 	worktreePickerEntries,
-	worktreeCleanupCommands,
 	worktreeRemovalCommands,
 };
 export type { RepoCandidate, WorktreeEntry, WorktreeManagerConfig, WorktreePickerEntry };
@@ -228,19 +228,23 @@ async function cleanupCurrentManagedWorktree(event: { reason?: string }, ctx: Mi
 
 	const repoRoot = managingRepoRootForWorktree(managed.path);
 	const autoCleanup = process.env.PI_WORKTREE_AUTO_CLEANUP === "1";
-	if (!autoCleanup) {
+	if (autoCleanup) {
+		const status = runGit(managed.path, ["status", "--porcelain"]);
+		if (!isCleanWorktreeStatus(status)) {
+			ctx.ui.notify(`Kept dirty worktree ${managed.name}; clean or remove it explicitly`, "warning");
+			return;
+		}
+	} else {
 		if (!ctx.hasUI) return;
-		const remove = await ctx.ui.confirm("Remove Pi worktree?", `Remove ${managed.name}?\n\n${managed.path}`);
+		const remove = await ctx.ui.confirm("Remove Pi worktree?", `Remove clean worktree ${managed.name}?\n\n${managed.path}\n\nThe branch will be preserved.`);
 		if (!remove) return;
 	}
 
-	const cleanup = worktreeCleanupCommands(managed.path, managed.branch);
 	try {
-		runGit(repoRoot, cleanup.remove);
-		runGit(repoRoot, cleanup.deleteBranch);
-		ctx.ui.notify(`Removed worktree ${managed.name}`, "success");
+		runGit(repoRoot, worktreeRemovalCommands(managed.path).safe);
+		ctx.ui.notify(`Removed worktree ${managed.name}; preserved branch ${managed.branch}`, "success");
 	} catch (error) {
-		ctx.ui.notify(`Worktree cleanup failed: ${errorText(error)}`, "error");
+		ctx.ui.notify(`Safe worktree cleanup failed; worktree and branch were preserved: ${errorText(error)}`, "error");
 	}
 }
 

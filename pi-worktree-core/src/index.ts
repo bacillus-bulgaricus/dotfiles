@@ -156,11 +156,8 @@ export function worktreeRemovalCommands(worktreePath: string): { safe: string[];
 	};
 }
 
-export function worktreeCleanupCommands(worktreePath: string, branch: string): { remove: string[]; deleteBranch: string[] } {
-	return {
-		remove: ["worktree", "remove", "--force", worktreePath],
-		deleteBranch: ["branch", "-D", branch],
-	};
+export function isCleanWorktreeStatus(porcelain: string): boolean {
+	return porcelain.trim().length === 0;
 }
 
 export function forceRemovalPrompt(worktreePath: string, failure: string): string {
@@ -252,7 +249,20 @@ export function discoverRepositories(options: {
 		for (const child of children) add(child);
 	}
 
-	return { repos, warnings };
+	const rootsByAlias = new Map<string, string[]>();
+	for (const repo of repos) {
+		const roots = rootsByAlias.get(repo.alias) ?? [];
+		roots.push(repo.root);
+		rootsByAlias.set(repo.alias, roots);
+	}
+	const ambiguousAliases = new Set<string>();
+	for (const [alias, roots] of rootsByAlias) {
+		if (roots.length < 2) continue;
+		ambiguousAliases.add(alias);
+		warnings.push(`Ambiguous repo alias ${alias}: ${roots.join(", ")}`);
+	}
+
+	return { repos: repos.filter((repo) => !ambiguousAliases.has(repo.alias)), warnings };
 }
 
 export function worktreePickerEntries(repo: RepoCandidate, porcelain: string): WorktreePickerEntry[] {
@@ -305,7 +315,13 @@ export function ensureWorktree(repoRoot: string, rawName?: string, options: Ensu
 
 	const baseRef = resolveWorktreeBaseRef(repoRoot, options);
 	let created = false;
-	if (!existsSync(plan.path)) {
+	if (existsSync(plan.path)) {
+		const existing = parseWorktreeList(runGit(repoRoot, ["worktree", "list", "--porcelain"]))
+			.find((entry) => normalize(entry.path) === normalize(plan.path));
+		if (!existing || existing.branch !== plan.branch) {
+			throw new Error(`${plan.path} exists but is not the expected git worktree on ${plan.branch}`);
+		}
+	} else {
 		runGit(repoRoot, ["worktree", "add", "-b", plan.branch, plan.path, baseRef]);
 		created = true;
 	}

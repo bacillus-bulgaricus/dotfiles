@@ -89,7 +89,7 @@ If the current directory is inside a git repo, that repo is included too.
 ## Notes
 
 - `/task` launches a fresh Pi session, not `pi -c`.
-- Task worktrees are marked with `PI_WORKTREE_AUTO_CLEANUP=1`; when the task Pi session exits, the worktree is force-removed and its `worktree-<name>` branch is deleted.
+- Task worktrees are marked with `PI_WORKTREE_AUTO_CLEANUP=1`. On exit, a clean worktree is safely removed and its branch is preserved. Dirty worktrees are left untouched for explicit recovery or cleanup.
 - The model must choose one of the discovered repo aliases.
 - The model should omit `baseRef` unless the user explicitly asks for a specific branch, tag, commit, or current branch.
 - The generated kickoff prompt is intentionally concise: goal, repo context, original request, inferred context, and constraints.
