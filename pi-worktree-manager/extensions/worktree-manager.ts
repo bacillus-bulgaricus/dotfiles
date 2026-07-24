@@ -3,7 +3,7 @@ import { basename, join, normalize } from "node:path";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { actionPicker, textInput } from "./fuzzy-select";
+import { actionPicker, textInput } from "../../pi-worktree-core/src/fuzzy-select";
 import {
 	discoverRepositories,
 	ensureWorktree,
@@ -54,6 +54,7 @@ function loadConfig(): WorktreeManagerConfig & { warnings: string[] } {
 
 type MinimalCommandContext = {
 	cwd: string;
+	mode: "tui" | "rpc" | "json" | "print";
 	hasUI?: boolean;
 	ui: {
 		notify: (message: string, level?: "info" | "success" | "warning" | "error") => void;
@@ -256,6 +257,10 @@ export default function worktreeManager(pi: ExtensionAPI): void {
 	pi.registerCommand("worktree", {
 		description: "Pick, create, or remove Pi-managed git worktrees",
 		handler: async (_args, ctx) => {
+			if (ctx.mode !== "tui") {
+				ctx.ui.notify("/worktree is available only in interactive TUI mode", "error");
+				return;
+			}
 			await showWorktreePicker(ctx as MinimalCommandContext);
 		},
 	});

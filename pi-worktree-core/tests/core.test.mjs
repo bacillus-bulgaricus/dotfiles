@@ -28,6 +28,7 @@ function makeRepoWithRemote() {
   git(seed, ['init', '-b', 'main']);
   git(seed, ['config', 'user.email', 'pi@example.com']);
   git(seed, ['config', 'user.name', 'Pi Test']);
+  git(seed, ['config', 'commit.gpgsign', 'false']);
   write(join(seed, 'file.txt'), 'initial\n');
   git(seed, ['add', 'file.txt']);
   git(seed, ['commit', '-m', 'initial']);
@@ -39,6 +40,7 @@ function makeRepoWithRemote() {
   git(root, ['clone', origin, upstream]);
   git(upstream, ['config', 'user.email', 'pi@example.com']);
   git(upstream, ['config', 'user.name', 'Pi Test']);
+  git(upstream, ['config', 'commit.gpgsign', 'false']);
   write(join(upstream, 'file.txt'), 'initial\nlatest\n');
   git(upstream, ['commit', '-am', 'latest default branch commit']);
   git(upstream, ['push', 'origin', 'main']);

@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { fuzzySelect } from "./fuzzy-select";
+import { fuzzySelect } from "../../pi-worktree-core/src/fuzzy-select";
 
 export type ClaudeSkill = { name: string; description: string; path: string };
 
@@ -132,6 +132,10 @@ export default function claudeBridge(pi: ExtensionAPI): void {
 	pi.registerCommand("claude-skill", {
 		description: "Pick a Claude Code skill and launch Claude with it in tmux",
 		handler: async (args, ctx) => {
+			if (ctx.mode !== "tui") {
+				ctx.ui.notify("/claude-skill is available only in interactive TUI mode", "error");
+				return;
+			}
 			if (!commandExists("claude")) {
 				ctx.ui.notify("Claude CLI not found in PATH", "error");
 				return;

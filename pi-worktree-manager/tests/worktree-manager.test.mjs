@@ -72,6 +72,7 @@ function makeManagedWorktree() {
   git(repo, ['init', '-b', 'main']);
   git(repo, ['config', 'user.email', 'pi@example.com']);
   git(repo, ['config', 'user.name', 'Pi Test']);
+  git(repo, ['config', 'commit.gpgsign', 'false']);
   writeFileSync(join(repo, 'base.txt'), 'base\n');
   git(repo, ['add', 'base.txt']);
   git(repo, ['commit', '-m', 'initial']);

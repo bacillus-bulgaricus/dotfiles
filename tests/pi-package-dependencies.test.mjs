@@ -10,6 +10,7 @@ const SUPERPOWERS_SOURCE = 'git:github.com/obra/superpowers@v6.2.0';
 
 test('local pi extension packages declare runtime peer dependencies they import', () => {
   const expected = {
+    'pi-worktree-core/package.json': ['@earendil-works/pi-coding-agent', '@earendil-works/pi-tui'],
     'pi-worktree-manager/package.json': ['@earendil-works/pi-coding-agent', '@earendil-works/pi-tui'],
     'pi-task/package.json': ['@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', '@earendil-works/pi-tui', 'typebox'],
     'pi-loop-package/package.json': ['@earendil-works/pi-ai', '@earendil-works/pi-coding-agent', 'typebox'],
