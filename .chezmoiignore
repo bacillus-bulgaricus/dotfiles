@@ -5,6 +5,9 @@ doctor.sh
 Makefile
 .gitignore
 ghostty/
+docs/
+tests/
+pi-*/
 **/node_modules/**
 
 # Deploy ~/.personal-zshrc on work machine, ~/.zshrc everywhere else
