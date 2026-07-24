@@ -1,0 +1,13 @@
+{
+  "name": "pi-loop-package",
+  "version": "0.1.0",
+  "private": true,
+  "keywords": ["pi-package"],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "pi": {
+    "extensions": ["./extensions/loop.ts"]
+  }
+}

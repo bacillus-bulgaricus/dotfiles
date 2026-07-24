@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Install pi packages declared here. Re-runs whenever this script changes
+# (chezmoi onchange). Idempotent: skips package when already installed.
+set -euo pipefail
+
+command -v pi >/dev/null 2>&1 || exit 0
+command -v npm >/dev/null 2>&1 || exit 0
+
+PACKAGES=(
+  "{{ .chezmoi.sourceDir }}/pi-worktree-core"
+  "{{ .chezmoi.sourceDir }}/pi-worktree-manager"
+  "{{ .chezmoi.sourceDir }}/pi-task"
+  "{{ .chezmoi.sourceDir }}/pi-loop-package"
+  "{{ .chezmoi.sourceDir }}/pi-superpowers-package"
+  "{{ .chezmoi.sourceDir }}/pi-claude-bridge"
+)
+
+for pkg in "${PACKAGES[@]}"; do
+  npm install --omit=dev --package-lock=false --ignore-scripts --prefix "$pkg"
+done
+
+installed="$(pi list 2>/dev/null || true)"
+for pkg in "${PACKAGES[@]}"; do
+  if ! grep -Fq -- "$pkg" <<<"$installed"; then
+    pi install "$pkg" || true
+  fi
+done

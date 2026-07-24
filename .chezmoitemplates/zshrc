@@ -5,6 +5,21 @@ for _prefix in /home/linuxbrew/.linuxbrew /opt/homebrew /usr/local; do
     [[ -x "$_prefix/bin/brew" ]] && eval "$($_prefix/bin/brew shellenv)" && break
 done
 unset _prefix
+export PATH="$HOME/.bun/bin:$PATH"
+
+# pyenv
+export PYENV_ROOT="$HOME/.pyenv"
+if [[ -d "$PYENV_ROOT" ]]; then
+  export PATH="$PYENV_ROOT/bin:$PATH"
+fi
+if command -v pyenv >/dev/null 2>&1; then
+  eval "$(pyenv init - zsh)"
+  eval "$(pyenv virtualenv-init -)"
+fi
+
+# pipx
+export PIPX_HOME="$HOME/.local/share/pipx"
+export PIPX_BIN_DIR="$HOME/.local/bin"
 
 # Stable SSH agent socket (fixes stale SSH_AUTH_SOCK in long-running processes like Claude Code)
 if [[ -n "$SSH_AUTH_SOCK" && "$SSH_AUTH_SOCK" != "$HOME/.ssh/ssh_auth_sock" ]]; then
