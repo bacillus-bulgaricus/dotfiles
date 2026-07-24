@@ -199,7 +199,9 @@ Expected: both commands exit zero.
 Run:
 
 ```bash
-node dot_pi/agent/skills/port-to-pi/scripts/validate-pi-skill.mjs /tmp/superpowers-upstream.SSoe2B/skills
+for skill in /tmp/superpowers-upstream.SSoe2B/skills/*; do
+  node dot_pi/agent/skills/port-to-pi/scripts/validate-pi-skill.mjs "$skill"
+done
 ```
 
 Expected: all 14 skill directories validate successfully.
@@ -231,11 +233,11 @@ const errors = lines.filter((entry) => entry.type === 'extension_error');
 if (errors.length) throw new Error(JSON.stringify(errors));
 const response = lines.find((entry) => entry.type === 'response' && entry.command === 'get_commands');
 if (!response?.success) throw new Error('get_commands did not succeed');
-const skills = response.data.commands.filter((command) => command.source === 'skill' && command.path.includes('/superpowers-upstream.SSoe2B/skills/'));
+const skills = response.data.commands.filter((command) => command.source === 'skill' && command.sourceInfo?.path?.includes('/superpowers-upstream.SSoe2B/skills/'));
 const names = skills.map((command) => command.name);
 if (skills.length !== 14) throw new Error(`expected 14 Superpowers skills, got ${skills.length}`);
 if (new Set(names).size !== 14) throw new Error('duplicate Superpowers skills discovered');
-if (skills.some((command) => command.path.includes('pi-superpowers-package'))) throw new Error('local port discovered');
+if (skills.some((command) => command.sourceInfo.path.includes('pi-superpowers-package'))) throw new Error('local port discovered');
 console.log(`ok: ${skills.length} unique native Superpowers skills`);
 NODE
 rm -rf "$tmp_config"
@@ -266,6 +268,7 @@ Run:
 if rg -n 'pi-superpowers-package' \
   --glob '!docs/superpowers/specs/2026-07-24-native-pi-superpowers-migration-design.md' \
   --glob '!docs/superpowers/plans/2026-07-24-native-pi-superpowers-migration.md' \
+  --glob '!tests/pi-package-dependencies.test.mjs' \
   .; then
   echo 'obsolete runtime reference remains' >&2
   exit 1
