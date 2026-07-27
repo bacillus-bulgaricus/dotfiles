@@ -12,7 +12,26 @@ touch "$config_file"
 chmod 700 "$ssh_dir"
 chmod 600 "$config_file"
 
-tmp_file="$(mktemp)"
+if ! awk -v begin="$begin_marker" -v end="$end_marker" '
+  $0 == begin {
+    if (in_block || seen_block) invalid=1
+    in_block=1
+    seen_block=1
+    next
+  }
+  $0 == end {
+    if (!in_block) invalid=1
+    in_block=0
+    next
+  }
+  END { exit(invalid || in_block ? 1 : 0) }
+' "$config_file"; then
+  echo "Refusing to update $config_file: unbalanced chezmoi markers" >&2
+  exit 1
+fi
+
+tmp_file="$(mktemp "$ssh_dir/.config.chezmoi.XXXXXX")"
+trap 'rm -f "$tmp_file"' EXIT
 
 awk -v begin="$begin_marker" -v end="$end_marker" '
   $0 == begin {in_block=1; next}
@@ -20,12 +39,11 @@ awk -v begin="$begin_marker" -v end="$end_marker" '
   !in_block {print}
 ' "$config_file" > "$tmp_file"
 
-{
-  cat "$tmp_file"
-  [[ -s "$tmp_file" ]] && echo
-  echo "$begin_marker"
-  echo "$managed_include"
-  echo "$end_marker"
-} > "$config_file"
+if [[ -s "$tmp_file" ]]; then
+  printf '\n' >> "$tmp_file"
+fi
+printf '%s\n%s\n%s\n' "$begin_marker" "$managed_include" "$end_marker" >> "$tmp_file"
 
-rm -f "$tmp_file"
+chmod 600 "$tmp_file"
+mv -f "$tmp_file" "$config_file"
+trap - EXIT

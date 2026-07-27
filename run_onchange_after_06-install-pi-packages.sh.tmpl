@@ -3,8 +3,8 @@
 # (chezmoi onchange). Idempotent: reconciles local and pinned git packages.
 set -euo pipefail
 
-command -v pi >/dev/null 2>&1 || exit 0
-command -v npm >/dev/null 2>&1 || exit 0
+command -v pi >/dev/null 2>&1 || { echo "pi is required to install Pi packages" >&2; exit 1; }
+command -v npm >/dev/null 2>&1 || { echo "npm is required to install Pi package dependencies" >&2; exit 1; }
 
 LOCAL_PACKAGES=(
   "{{ .chezmoi.sourceDir }}/pi-worktree-core"
@@ -17,16 +17,16 @@ LOCAL_PACKAGES=(
 SUPERPOWERS_PACKAGE="git:github.com/obra/superpowers@v6.2.0"
 
 for pkg in "${LOCAL_PACKAGES[@]}"; do
-  npm install --omit=dev --package-lock=false --ignore-scripts --prefix "$pkg"
+  npm install --omit=dev --package-lock=false --ignore-scripts --legacy-peer-deps --prefix "$pkg"
 done
 
-installed="$(pi list 2>/dev/null || true)"
+installed="$(pi list)"
 for pkg in "${LOCAL_PACKAGES[@]}"; do
   if ! grep -Fq -- "$pkg" <<<"$installed"; then
-    pi install "$pkg" || true
+    pi install "$pkg"
   fi
 done
 
 # pi list includes configured git sources even when their clones are absent, so
 # always let pi install reconcile the immutable pinned package.
-pi install "$SUPERPOWERS_PACKAGE" || true
+pi install "$SUPERPOWERS_PACKAGE"

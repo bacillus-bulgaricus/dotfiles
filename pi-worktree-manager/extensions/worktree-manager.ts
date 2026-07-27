@@ -3,7 +3,7 @@ import { basename, join, normalize } from "node:path";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { actionPicker, textInput } from "./fuzzy-select";
+import { actionPicker, textInput } from "pi-worktree-core/fuzzy-select";
 import {
 	discoverRepositories,
 	ensureWorktree,
@@ -12,19 +12,19 @@ import {
 	forceRemovalPrompt,
 	identifyPiManagedWorktree,
 	identifyPiManagedWorktreeForRepo,
+	isCleanWorktreeStatus,
 	managingRepoRootForWorktree,
 	parseWorktreeList,
 	parseWorktreeManagerConfig,
 	runGit,
 	tmuxLaunchCommand,
 	worktreePickerEntries,
-	worktreeCleanupCommands,
 	worktreeRemovalCommands,
 	type RepoCandidate,
 	type WorktreeEntry,
 	type WorktreeManagerConfig,
 	type WorktreePickerEntry,
-} from "../../pi-worktree-core/src/index";
+} from "pi-worktree-core/index";
 
 export {
 	discoverRepositories,
@@ -32,12 +32,12 @@ export {
 	forceRemovalPrompt,
 	identifyPiManagedWorktree,
 	identifyPiManagedWorktreeForRepo,
+	isCleanWorktreeStatus,
 	managingRepoRootForWorktree,
 	parseWorktreeList,
 	parseWorktreeManagerConfig,
 	tmuxLaunchCommand,
 	worktreePickerEntries,
-	worktreeCleanupCommands,
 	worktreeRemovalCommands,
 };
 export type { RepoCandidate, WorktreeEntry, WorktreeManagerConfig, WorktreePickerEntry };
@@ -54,9 +54,10 @@ function loadConfig(): WorktreeManagerConfig & { warnings: string[] } {
 
 type MinimalCommandContext = {
 	cwd: string;
+	mode: "tui" | "rpc" | "json" | "print";
 	hasUI?: boolean;
 	ui: {
-		notify: (message: string, level?: "info" | "success" | "warning" | "error") => void;
+		notify: (message: string, level?: "info" | "warning" | "error") => void;
 		confirm: (title: string, message: string) => Promise<boolean>;
 		custom: <T>(factory: (tui: { requestRender: () => void }, theme: any, keybindings: unknown, done: (value: T) => void) => any) => Promise<T>;
 		input: (title: string, placeholder?: string) => Promise<string | undefined>;
@@ -66,7 +67,7 @@ type MinimalCommandContext = {
 function launchTmux(info: { name: string; path: string }, ctx: MinimalCommandContext): void {
 	const launch = tmuxLaunchCommand({ name: info.name, path: info.path, insideTmux: Boolean(process.env.TMUX) });
 	execFileSync(launch.command, launch.args, { encoding: "utf8" });
-	ctx.ui.notify(launch.description, "success");
+	ctx.ui.notify(launch.description, "info");
 }
 
 function listWorktreesForRepos(repos: RepoCandidate[], ctx: MinimalCommandContext): WorktreePickerEntry[] {
@@ -115,7 +116,7 @@ async function createWorktreeFlow(repos: RepoCandidate[], ctx: MinimalCommandCon
 
 	try {
 		const info = ensureWorktree(repo.root, rawName);
-		ctx.ui.notify(`${info.created ? "Created" : "Using"} ${repo.alias} / ${info.name}`, "success");
+		ctx.ui.notify(`${info.created ? "Created" : "Using"} ${repo.alias} / ${info.name}`, "info");
 		launchTmux({ name: info.name, path: info.path }, ctx);
 	} catch (error) {
 		ctx.ui.notify(`Create failed: ${errorText(error)}`, "error");
@@ -144,7 +145,7 @@ async function deleteWorktree(entry: WorktreePickerEntry, ctx: MinimalCommandCon
 	try {
 		runGit(entry.repo.root, commands.safe);
 		deleteManagedBranch(entry.repo.root, entry.managed.branch, ctx);
-		ctx.ui.notify(`Removed ${entry.label}`, "success");
+		ctx.ui.notify(`Removed ${entry.label}`, "info");
 		return;
 	} catch (error) {
 		const failure = errorText(error);
@@ -158,7 +159,7 @@ async function deleteWorktree(entry: WorktreePickerEntry, ctx: MinimalCommandCon
 	try {
 		runGit(entry.repo.root, commands.force);
 		deleteManagedBranch(entry.repo.root, entry.managed.branch, ctx);
-		ctx.ui.notify(`Force-removed ${entry.label}`, "success");
+		ctx.ui.notify(`Force-removed ${entry.label}`, "info");
 	} catch (error) {
 		ctx.ui.notify(`Force removal failed: ${errorText(error)}`, "error");
 	}
@@ -228,19 +229,23 @@ async function cleanupCurrentManagedWorktree(event: { reason?: string }, ctx: Mi
 
 	const repoRoot = managingRepoRootForWorktree(managed.path);
 	const autoCleanup = process.env.PI_WORKTREE_AUTO_CLEANUP === "1";
-	if (!autoCleanup) {
+	if (autoCleanup) {
+		const status = runGit(managed.path, ["status", "--porcelain"]);
+		if (!isCleanWorktreeStatus(status)) {
+			ctx.ui.notify(`Kept dirty worktree ${managed.name}; clean or remove it explicitly`, "warning");
+			return;
+		}
+	} else {
 		if (!ctx.hasUI) return;
-		const remove = await ctx.ui.confirm("Remove Pi worktree?", `Remove ${managed.name}?\n\n${managed.path}`);
+		const remove = await ctx.ui.confirm("Remove Pi worktree?", `Remove clean worktree ${managed.name}?\n\n${managed.path}\n\nThe branch will be preserved.`);
 		if (!remove) return;
 	}
 
-	const cleanup = worktreeCleanupCommands(managed.path, managed.branch);
 	try {
-		runGit(repoRoot, cleanup.remove);
-		runGit(repoRoot, cleanup.deleteBranch);
-		ctx.ui.notify(`Removed worktree ${managed.name}`, "success");
+		runGit(repoRoot, worktreeRemovalCommands(managed.path).safe);
+		ctx.ui.notify(`Removed worktree ${managed.name}; preserved branch ${managed.branch}`, "info");
 	} catch (error) {
-		ctx.ui.notify(`Worktree cleanup failed: ${errorText(error)}`, "error");
+		ctx.ui.notify(`Safe worktree cleanup failed; worktree and branch were preserved: ${errorText(error)}`, "error");
 	}
 }
 
@@ -252,6 +257,10 @@ export default function worktreeManager(pi: ExtensionAPI): void {
 	pi.registerCommand("worktree", {
 		description: "Pick, create, or remove Pi-managed git worktrees",
 		handler: async (_args, ctx) => {
+			if (ctx.mode !== "tui") {
+				ctx.ui.notify("/worktree is available only in interactive TUI mode", "error");
+				return;
+			}
 			await showWorktreePicker(ctx as MinimalCommandContext);
 		},
 	});

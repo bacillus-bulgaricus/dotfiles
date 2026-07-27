@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createJiti } from 'jiti';
 
 const jiti = createJiti(import.meta.url);
-const mod = await jiti.import('../extensions/fuzzy-select.ts');
+const mod = await jiti.import('../../pi-worktree-core/src/fuzzy-select.ts');
 
 const items = [
   { name: 'systematic-debugging', description: 'Use when encountering bugs' },

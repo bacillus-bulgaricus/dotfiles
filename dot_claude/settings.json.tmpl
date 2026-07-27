@@ -5,7 +5,6 @@
       "Bash(cat:*)",
       "Bash(date:*)",
       "Bash(file:*)",
-      "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(head:*)",
       "Bash(ls:*)",
@@ -16,19 +15,12 @@
       "Bash(wc:*)",
       "Bash(which:*)",
       "Bash(tree:*)",
-      "Bash(git add:*)",
-      "Bash(git bisect:*)",
       "Bash(git blame:*)",
-      "Bash(git commit:*)",
       "Bash(git diff:*)",
-      "Bash(git fetch:*)",
       "Bash(git grep:*)",
       "Bash(git log:*)",
       "Bash(git ls-remote:*)",
-      "Bash(git merge:*)",
-      "Bash(git pull:*)",
       "Bash(git remote show:*)",
-      "Bash(git restore:*)",
       "Bash(git show:*)",
       "Bash(git status:*)",
       "Bash(gh issue list:*)",
@@ -150,10 +142,6 @@
       }
     ]
   },
-  "statusLine": {
-    "type": "command",
-    "command": "{{ .chezmoi.homeDir }}/.claude/statusline-command.sh"
-  },
   "enabledPlugins": {
     "commit-commands@claude-code-plugins": true,
     "marketplace-auto-update@datadog-claude-plugins": true,
@@ -172,11 +160,11 @@
   },
   "sandbox": {
     "enabled": true,
-    "autoAllowBashIfSandboxed": true,
+    "autoAllowBashIfSandboxed": false,
     "excludedCommands": []
   },
   "alwaysThinkingEnabled": true,
-  "skipAutoPermissionPrompt": true,
+  "skipAutoPermissionPrompt": false,
   "model": "opus",
   "env": {
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "40"

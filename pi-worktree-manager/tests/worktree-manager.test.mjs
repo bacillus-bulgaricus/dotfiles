@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createJiti } from 'jiti';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const jiti = createJiti(import.meta.url);
 const mod = await jiti.import('../extensions/worktree-manager.ts');
@@ -57,4 +61,74 @@ test('force removal prompt names the worktree path and the failed safe-removal o
   assert.match(prompt, /\/repo\/\.pi\/worktrees\/feature-auth/);
   assert.match(prompt, /contains modified files/);
   assert.match(prompt, /git worktree remove --force/);
+});
+
+function git(cwd, args) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+}
+
+function makeManagedWorktree() {
+  const repo = mkdtempSync(join(tmpdir(), 'pi-cleanup-'));
+  git(repo, ['init', '-b', 'main']);
+  git(repo, ['config', 'user.email', 'pi@example.com']);
+  git(repo, ['config', 'user.name', 'Pi Test']);
+  git(repo, ['config', 'commit.gpgsign', 'false']);
+  writeFileSync(join(repo, 'base.txt'), 'base\n');
+  git(repo, ['add', 'base.txt']);
+  git(repo, ['commit', '-m', 'initial']);
+  const path = join(repo, '.pi', 'worktrees', 'cleanup');
+  mkdirSync(join(repo, '.pi', 'worktrees'), { recursive: true });
+  git(repo, ['worktree', 'add', '-b', 'worktree-cleanup', path, 'main']);
+  return { repo, path, branch: 'worktree-cleanup' };
+}
+
+function shutdownHandler() {
+  let handler;
+  mod.default({
+    on(name, candidate) {
+      if (name === 'session_shutdown') handler = candidate;
+    },
+    registerCommand() {},
+  });
+  return handler;
+}
+
+async function runAutomaticCleanup(path) {
+  const notifications = [];
+  const previous = process.env.PI_WORKTREE_AUTO_CLEANUP;
+  process.env.PI_WORKTREE_AUTO_CLEANUP = '1';
+  try {
+    await shutdownHandler()(
+      { reason: 'quit' },
+      {
+        cwd: path,
+        hasUI: false,
+        ui: { notify(message, level) { notifications.push({ message, level }); } },
+      },
+    );
+  } finally {
+    if (previous === undefined) delete process.env.PI_WORKTREE_AUTO_CLEANUP;
+    else process.env.PI_WORKTREE_AUTO_CLEANUP = previous;
+  }
+  return notifications;
+}
+
+test('automatic cleanup preserves a dirty worktree and its branch', async () => {
+  const managed = makeManagedWorktree();
+  writeFileSync(join(managed.path, 'unsaved.txt'), 'do not delete\n');
+
+  const notifications = await runAutomaticCleanup(managed.path);
+
+  assert.equal(existsSync(managed.path), true);
+  assert.match(git(managed.repo, ['branch', '--list', managed.branch]), /worktree-cleanup/);
+  assert.match(notifications.at(-1).message, /dirty/i);
+});
+
+test('automatic cleanup safely removes a clean worktree but preserves its branch', async () => {
+  const managed = makeManagedWorktree();
+
+  await runAutomaticCleanup(managed.path);
+
+  assert.equal(existsSync(managed.path), false);
+  assert.match(git(managed.repo, ['branch', '--list', managed.branch]), /worktree-cleanup/);
 });

@@ -8,6 +8,25 @@ import { createJiti } from 'jiti';
 const jiti = createJiti(import.meta.url);
 const mod = await jiti.import('../extensions/claude-skill.ts');
 
+test('/claude-skill rejects non-TUI invocation before discovery or launch', async () => {
+  let handler;
+  const notifications = [];
+  mod.default({
+    registerCommand(_name, options) { handler = options.handler; },
+  });
+
+  await handler('', {
+    mode: 'rpc',
+    cwd: '/not/a/repository',
+    ui: { notify(message, level) { notifications.push({ message, level }); } },
+  });
+
+  assert.deepEqual(notifications, [{
+    message: '/claude-skill is available only in interactive TUI mode',
+    level: 'error',
+  }]);
+});
+
 test('parseFrontmatter extracts skill name and description', () => {
   assert.deepEqual(mod.parseSkillFrontmatter(`---\nname: systematic-debugging\ndescription: Use when debugging failures\n---\n# Body\n`), {
     name: 'systematic-debugging',

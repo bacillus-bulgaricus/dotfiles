@@ -28,6 +28,7 @@ function makeRepoWithRemote() {
   git(seed, ['init', '-b', 'main']);
   git(seed, ['config', 'user.email', 'pi@example.com']);
   git(seed, ['config', 'user.name', 'Pi Test']);
+  git(seed, ['config', 'commit.gpgsign', 'false']);
   write(join(seed, 'file.txt'), 'initial\n');
   git(seed, ['add', 'file.txt']);
   git(seed, ['commit', '-m', 'initial']);
@@ -39,6 +40,7 @@ function makeRepoWithRemote() {
   git(root, ['clone', origin, upstream]);
   git(upstream, ['config', 'user.email', 'pi@example.com']);
   git(upstream, ['config', 'user.name', 'Pi Test']);
+  git(upstream, ['config', 'commit.gpgsign', 'false']);
   write(join(upstream, 'file.txt'), 'initial\nlatest\n');
   git(upstream, ['commit', '-am', 'latest default branch commit']);
   git(upstream, ['push', 'origin', 'main']);
@@ -89,13 +91,6 @@ test('ensureWorktree can create from the latest remote default branch', () => {
 
   assert.equal(worktree.created, true);
   assert.equal(git(worktree.path, ['rev-parse', 'HEAD']), latestDefaultHead);
-});
-
-test('worktreeCleanupCommands force-removes the worktree and deletes its branch', () => {
-  assert.deepEqual(core.worktreeCleanupCommands('/repo/.pi/worktrees/feature-auth', 'worktree-feature-auth'), {
-    remove: ['worktree', 'remove', '--force', '/repo/.pi/worktrees/feature-auth'],
-    deleteBranch: ['branch', '-D', 'worktree-feature-auth'],
-  });
 });
 
 test('tmuxPiLaunchCommand launches a fresh Pi session with shell-quoted prompt', () => {
@@ -165,4 +160,69 @@ test('parseWorktreeManagerConfig accepts repoSearchRoots arrays', () => {
     repoSearchRoots: ['~/src'],
     warnings: [],
   });
+});
+
+test('isCleanWorktreeStatus only accepts empty porcelain output', () => {
+  assert.equal(core.isCleanWorktreeStatus(''), true);
+  assert.equal(core.isCleanWorktreeStatus('  \n'), true);
+  assert.equal(core.isCleanWorktreeStatus('?? untracked.txt\n'), false);
+  assert.equal(core.isCleanWorktreeStatus(' M changed.txt\n'), false);
+});
+
+test('discoverRepositories excludes ambiguous basename aliases and reports their roots', () => {
+  const result = core.discoverRepositories({
+    cwd: '/outside',
+    config: { repoSearchRoots: ['/first', '/second'] },
+    ops: {
+      listDirectories(path) {
+        return path === '/first' ? ['/first/api'] : ['/second/api'];
+      },
+      gitRoot(path) {
+        return path === '/outside' ? undefined : path;
+      },
+      realpath(path) {
+        return path;
+      },
+    },
+  });
+
+  assert.deepEqual(result.repos, []);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /Ambiguous repo alias api/);
+  assert.match(result.warnings[0], /\/first\/api/);
+  assert.match(result.warnings[0], /\/second\/api/);
+});
+
+test('ensureWorktree rejects an existing path that is not a registered worktree', () => {
+  const { repo } = makeRepoWithRemote();
+  const plan = core.ensureWorktreePlan(repo, 'occupied');
+  mkdirSync(plan.path, { recursive: true });
+
+  assert.throws(
+    () => core.ensureWorktree(repo, 'occupied', { baseRef: 'main' }),
+    /exists but is not the expected git worktree/,
+  );
+});
+
+test('ensureWorktree reuses an existing worktree without fetching its base again', () => {
+  const { repo } = makeRepoWithRemote();
+  core.ensureWorktree(repo, 'offline-reuse', { baseRef: 'main' });
+  git(repo, ['remote', 'remove', 'origin']);
+
+  const reused = core.ensureWorktree(repo, 'offline-reuse', { defaultBase: 'remoteDefault' });
+
+  assert.equal(reused.created, false);
+  assert.equal(reused.branch, 'worktree-offline-reuse');
+});
+
+test('ensureWorktree reuses only a registered worktree on the expected branch', () => {
+  const { repo } = makeRepoWithRemote();
+  const created = core.ensureWorktree(repo, 'reusable', { baseRef: 'main' });
+
+  const reused = core.ensureWorktree(repo, 'reusable', { baseRef: 'main' });
+
+  assert.equal(created.created, true);
+  assert.equal(reused.created, false);
+  assert.equal(reused.path, created.path);
+  assert.equal(reused.branch, 'worktree-reusable');
 });

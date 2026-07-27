@@ -1,26 +1,52 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 
-export default function loopExtension(pi: ExtensionAPI): void {
-	let active = false;
-	let prompt = "";
-	let iteration = 0;
-	let maxIterations = 100;
-	let shouldContinue = false;
+type LoopState = {
+	active: boolean;
+	prompt: string;
+	iteration: number;
+	maxIterations: number;
+	shouldContinue: boolean;
+};
 
-	function stopLoop(reason: string): void {
-		active = false;
-		shouldContinue = false;
-		pi.appendEntry("loop-state", { active, prompt, iteration, maxIterations, reason, stoppedAt: Date.now() });
+function isLoopState(value: unknown): value is LoopState {
+	if (!value || typeof value !== "object") return false;
+	const state = value as Partial<LoopState>;
+	return typeof state.active === "boolean"
+		&& typeof state.prompt === "string"
+		&& Number.isInteger(state.iteration)
+		&& Number.isInteger(state.maxIterations)
+		&& typeof state.shouldContinue === "boolean";
+}
+
+export default function loopExtension(pi: ExtensionAPI): void {
+	let state: LoopState = {
+		active: false,
+		prompt: "",
+		iteration: 0,
+		maxIterations: 100,
+		shouldContinue: false,
+	};
+
+	function persist(extra: Record<string, unknown> = {}): void {
+		pi.appendEntry("loop-state", { ...state, ...extra });
 	}
 
-	function startLoop(nextPrompt: string, max?: number): void {
-		active = true;
-		prompt = nextPrompt;
-		iteration = 0;
-		maxIterations = max && max > 0 ? Math.floor(max) : 100;
-		shouldContinue = false;
-		pi.appendEntry("loop-state", { active, prompt, iteration, maxIterations, startedAt: Date.now() });
+	function stopLoop(reason: string): void {
+		state = { ...state, active: false, shouldContinue: false };
+		persist({ reason, stoppedAt: Date.now() });
+	}
+
+	function startLoop(prompt: string, max?: number): void {
+		state = {
+			active: true,
+			prompt,
+			iteration: 0,
+			maxIterations: max && max > 0 ? Math.floor(max) : 100,
+			shouldContinue: false,
+		};
+		persist({ startedAt: Date.now() });
 	}
 
 	pi.registerTool({
@@ -28,7 +54,7 @@ export default function loopExtension(pi: ExtensionAPI): void {
 		label: "Loop Control",
 		description: "Stop or continue an active prompt loop",
 		parameters: Type.Object({
-			action: Type.Union([Type.Literal("stop"), Type.Literal("continue")]),
+			action: StringEnum(["stop", "continue"] as const),
 			reason: Type.Optional(Type.String()),
 		}),
 		promptSnippet: "Stop or continue the automated loop when appropriate",
@@ -41,13 +67,15 @@ export default function loopExtension(pi: ExtensionAPI): void {
 				stopLoop(params.reason || "Stopped by agent");
 				return {
 					content: [{ type: "text", text: `Loop stopped. ${params.reason || ""}`.trim() }],
-					details: { active, prompt, iteration, maxIterations },
+					details: state,
 				};
 			}
-			shouldContinue = true;
+			if (!state.active) throw new Error("No loop is active");
+			state = { ...state, shouldContinue: true };
+			persist({ reason: params.reason || "Continuation requested" });
 			return {
 				content: [{ type: "text", text: "Loop marked to continue." }],
-				details: { active, prompt, iteration, maxIterations },
+				details: state,
 			};
 		},
 	});
@@ -58,8 +86,8 @@ export default function loopExtension(pi: ExtensionAPI): void {
 			const raw = (args || "").trim();
 			if (!raw || raw === "status") {
 				ctx.ui.notify(
-					active
-						? `Loop active: iteration ${iteration}/${maxIterations} | prompt: ${prompt}`
+					state.active
+						? `Loop active: iteration ${state.iteration}/${state.maxIterations} | prompt: ${state.prompt}`
 						: "Loop is inactive",
 					"info",
 				);
@@ -68,7 +96,8 @@ export default function loopExtension(pi: ExtensionAPI): void {
 
 			if (raw === "stop") {
 				stopLoop("Stopped by user");
-				ctx.ui.notify("Loop stopped", "success");
+				ctx.ui.notify("Loop stopped", "info");
+				ctx.ui.setStatus("loop", undefined);
 				return;
 			}
 
@@ -91,43 +120,57 @@ export default function loopExtension(pi: ExtensionAPI): void {
 			}
 
 			startLoop(body, max);
-			ctx.ui.notify(`Loop started (max ${maxIterations})`, "success");
+			ctx.ui.setStatus("loop", `loop ${state.iteration}/${state.maxIterations}`);
+			ctx.ui.notify(`Loop started (max ${state.maxIterations})`, "info");
 			pi.sendUserMessage(body);
 		},
 	});
 
+	pi.on("session_start", async (_event, ctx) => {
+		const entries = ctx.sessionManager.getBranch();
+		for (let index = entries.length - 1; index >= 0; index -= 1) {
+			const entry = entries[index];
+			if (entry.type !== "custom" || entry.customType !== "loop-state" || !isLoopState(entry.data)) continue;
+			state = entry.data;
+			break;
+		}
+		ctx.ui.setStatus("loop", state.active ? `loop ${state.iteration}/${state.maxIterations}` : undefined);
+	});
+
 	pi.on("before_agent_start", async (event) => {
-		if (!active) return;
+		if (!state.active) return;
 		return {
 			systemPrompt:
-				event.systemPrompt +
-				"\n\nAn autonomous loop is active. At the end of each turn, decide whether to continue or stop by calling loop_control. If objective is complete, call loop_control with action=stop.",
+				event.systemPrompt
+				+ "\n\nAn autonomous loop is active. At the end of each turn, decide whether to continue or stop by calling loop_control. If objective is complete, call loop_control with action=stop.",
 		};
 	});
 
 	pi.on("tool_result", async (event, ctx) => {
 		if (event.toolName !== "loop_control") return;
-		ctx.ui.setStatus("loop", active ? `loop ${iteration}/${maxIterations}` : undefined);
+		ctx.ui.setStatus("loop", state.active ? `loop ${state.iteration}/${state.maxIterations}` : undefined);
 	});
 
-	pi.on("agent_end", async (_event, ctx) => {
-		if (!active) return;
-		if (!shouldContinue) {
+	pi.on("agent_settled", async (_event, ctx) => {
+		if (!state.active) return;
+		if (!state.shouldContinue) {
 			stopLoop("Agent did not request continue");
 			ctx.ui.notify("Loop stopped: agent chose not to continue", "info");
 			ctx.ui.setStatus("loop", undefined);
 			return;
 		}
-		iteration += 1;
-		if (iteration >= maxIterations) {
+		const nextIteration = state.iteration + 1;
+		if (nextIteration >= state.maxIterations) {
+			state = { ...state, iteration: nextIteration };
 			stopLoop("Reached max iterations");
-			ctx.ui.notify(`Loop stopped: reached max iterations (${maxIterations})`, "warning");
+			ctx.ui.notify(`Loop stopped: reached max iterations (${state.maxIterations})`, "warning");
 			ctx.ui.setStatus("loop", undefined);
 			return;
 		}
 
-		shouldContinue = false;
-		ctx.ui.setStatus("loop", `loop ${iteration}/${maxIterations}`);
-		pi.sendUserMessage(prompt, { deliverAs: "followUp" });
+		state = { ...state, iteration: nextIteration, shouldContinue: false };
+		persist({ continuedAt: Date.now() });
+		ctx.ui.setStatus("loop", `loop ${state.iteration}/${state.maxIterations}`);
+		pi.sendUserMessage(state.prompt, { deliverAs: "followUp" });
 	});
 }

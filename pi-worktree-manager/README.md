@@ -72,4 +72,4 @@ New worktree flow:
 - Deletion is restricted to Pi-managed worktrees: paths under `<repo>/.pi/worktrees/<name>` on branch `worktree-<name>`.
 - `D` deletion runs safe `git worktree remove <path>` first, then deletes the `worktree-<name>` branch.
 - If safe removal fails, Pi asks whether to force-remove and shows the failed output plus the path that would be removed.
-- Pi-managed sessions launched with `PI_WORKTREE_AUTO_CLEANUP=1` are force-removed automatically on session shutdown, and their associated `worktree-<name>` branch is deleted.
+- Pi-managed sessions launched with `PI_WORKTREE_AUTO_CLEANUP=1` remove only clean worktrees on session shutdown. Dirty worktrees and all associated branches are preserved.

@@ -28,4 +28,4 @@ During each turn, the agent can call `loop_control`:
 - `action: "continue"` to run another iteration
 - `action: "stop"` to stop the loop
 
-If the agent does not call `continue`, the loop stops automatically.
+If the agent does not call `continue`, the loop stops automatically after the agent fully settles. Active loop state is restored when a saved session is resumed or extensions are reloaded.

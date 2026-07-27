@@ -4,7 +4,7 @@ import { createJiti } from 'jiti';
 
 const jiti = createJiti(import.meta.url);
 const worktree = await jiti.import('../extensions/worktree-manager.ts');
-const ui = await jiti.import('../extensions/fuzzy-select.ts');
+const ui = await jiti.import('../../pi-worktree-core/src/fuzzy-select.ts');
 
 test('picker custom actions use uppercase shortcuts without stealing lowercase search input', () => {
   assert.deepEqual(ui.pickerInputAction('N', [{ key: 'N', label: 'New' }]), { type: 'custom', key: 'N' });
@@ -32,6 +32,26 @@ test('worktree manager registers only the interactive /worktree command and a sh
   assert.deepEqual(commands.map((command) => command.name), ['worktree']);
   assert.deepEqual(flags, []);
   assert.deepEqual(events.map((event) => event.name), ['session_shutdown']);
+});
+
+test('/worktree rejects non-TUI invocation before opening a picker', async () => {
+  let handler;
+  const notifications = [];
+  worktree.default({
+    on() {},
+    registerCommand(_name, options) { handler = options.handler; },
+  });
+
+  await handler('', {
+    mode: 'rpc',
+    cwd: '/not/a/repository',
+    ui: { notify(message, level) { notifications.push({ message, level }); } },
+  });
+
+  assert.deepEqual(notifications, [{
+    message: '/worktree is available only in interactive TUI mode',
+    level: 'error',
+  }]);
 });
 
 test('worktree cleanup only runs for quit shutdown events', () => {

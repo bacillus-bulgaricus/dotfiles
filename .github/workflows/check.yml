@@ -1,0 +1,37 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install system tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes build-essential jq shellcheck
+          curl -fsSL https://github.com/twpayne/chezmoi/releases/download/v2.70.3/chezmoi_2.70.3_linux_amd64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin chezmoi
+          curl -fsSL https://github.com/neovim/neovim/releases/download/v0.12.2/nvim-linux-x86_64.tar.gz \
+            | sudo tar -xz -C /opt
+          echo "/opt/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint:shell
+      - run: npm run check

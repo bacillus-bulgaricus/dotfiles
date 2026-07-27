@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { fuzzySelect } from "./fuzzy-select";
+import { fuzzySelect } from "pi-worktree-core/fuzzy-select";
 
 export type ClaudeSkill = { name: string; description: string; path: string };
 
@@ -132,6 +132,10 @@ export default function claudeBridge(pi: ExtensionAPI): void {
 	pi.registerCommand("claude-skill", {
 		description: "Pick a Claude Code skill and launch Claude with it in tmux",
 		handler: async (args, ctx) => {
+			if (ctx.mode !== "tui") {
+				ctx.ui.notify("/claude-skill is available only in interactive TUI mode", "error");
+				return;
+			}
 			if (!commandExists("claude")) {
 				ctx.ui.notify("Claude CLI not found in PATH", "error");
 				return;
@@ -169,7 +173,7 @@ export default function claudeBridge(pi: ExtensionAPI): void {
 			const launch = tmuxLaunchCommand({ cwd: ctx.cwd, skillName, prompt, insideTmux: Boolean(process.env.TMUX) });
 			try {
 				execFileSync(launch.command, launch.args, { encoding: "utf8" });
-				ctx.ui.notify(launch.description, "success");
+				ctx.ui.notify(launch.description, "info");
 			} catch (error) {
 				const text = error instanceof Error ? error.message : String(error);
 				ctx.ui.notify(`Failed to launch Claude skill: ${text}`, "error");

@@ -5,12 +5,12 @@ import { createJiti } from 'jiti';
 const jiti = createJiti(import.meta.url);
 const task = await jiti.import('../extensions/task.ts');
 
-test('task extension registers a /task command and task tool', () => {
+test('task extension registers only the user-invoked /task command', () => {
   const commands = [];
   const tools = [];
   task.default({
     registerCommand(name, options) {
-      commands.push({ name, description: options.description });
+      commands.push({ name, description: options.description, handler: options.handler });
     },
     registerTool(definition) {
       tools.push(definition);
@@ -18,44 +18,41 @@ test('task extension registers a /task command and task tool', () => {
   });
 
   assert.deepEqual(commands.map((command) => command.name), ['task']);
-  assert.deepEqual(tools.map((tool) => tool.name), ['task']);
-  assert.ok(tools[0].parameters.properties.baseRef, 'task tool exposes optional baseRef');
+  assert.deepEqual(tools, []);
 });
 
-test('parseTaskConfig accepts optional model override and tool confirmation default', () => {
-  assert.deepEqual(task.parseTaskConfig('{"model":"openai/gpt-5.5","tool":{"requireConfirmation":false}}'), {
+test('parseTaskConfig accepts an optional model override', () => {
+  assert.deepEqual(task.parseTaskConfig('{"model":"openai/gpt-5.5"}'), {
     model: 'openai/gpt-5.5',
-    tool: { requireConfirmation: false },
     warnings: [],
   });
-  assert.deepEqual(task.parseTaskConfig('{"model":3,"tool":{"requireConfirmation":"no"}}'), {
-    warnings: ['model must be a provider/model string', 'tool.requireConfirmation must be a boolean'],
+  assert.deepEqual(task.parseTaskConfig('{"model":3}'), {
+    warnings: ['model must be a provider/model string'],
   });
 });
 
-test('taskToolRequiresConfirmation defaults to safe confirmation and allows overrides', () => {
-  assert.equal(task.taskToolRequiresConfirmation({ warnings: [] }, {}), true);
-  assert.equal(task.taskToolRequiresConfirmation({ warnings: [], tool: { requireConfirmation: false } }, {}), false);
-  assert.equal(task.taskToolRequiresConfirmation({ warnings: [], tool: { requireConfirmation: false } }, { requireConfirmation: true }), true);
-  assert.equal(task.taskToolRequiresConfirmation({ warnings: [], tool: { requireConfirmation: true } }, { requireConfirmation: false }), false);
-});
+test('/task rejects non-TUI invocation before performing task inference', async () => {
+  let handler;
+  task.default({
+    registerCommand(_name, options) {
+      handler = options.handler;
+    },
+    registerTool() {
+      assert.fail('task tool must not be registered');
+    },
+  });
+  const notifications = [];
 
-test('explicitTaskFromToolParams builds a direct handoff without model inference', () => {
-  assert.deepEqual(task.explicitTaskFromToolParams({
-    description: 'Review PR 123',
-    repoAlias: 'integrations-core',
-    worktreeName: 'Review PR 123',
-    kickoffPrompt: 'Review the diff and report findings.',
-    baseRef: 'current-branch',
-  }), {
-    repoAlias: 'integrations-core',
-    goal: 'Review PR 123',
-    worktreeName: 'review-pr-123',
-    kickoffPrompt: 'Review the diff and report findings.',
-    baseRef: 'current-branch',
+  await handler('review this repository', {
+    mode: 'rpc',
+    cwd: '/not/a/repo',
+    ui: { notify(message, level) { notifications.push({ message, level }); } },
   });
 
-  assert.equal(task.explicitTaskFromToolParams({ description: 'Review PR 123', repoAlias: 'integrations-core' }), undefined);
+  assert.deepEqual(notifications, [{
+    message: '/task is available only in interactive TUI mode',
+    level: 'error',
+  }]);
 });
 
 test('parseTaskArgs removes --split before model inference', () => {

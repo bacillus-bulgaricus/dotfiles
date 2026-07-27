@@ -3,7 +3,7 @@ import { basename, dirname, join, normalize, resolve, sep } from "node:path";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 
-export type WorktreeEntry = { path: string; name: string; branch?: string };
+export type WorktreeEntry = { path: string; name: string; branch: string | undefined };
 export type RepoCandidate = { alias: string; root: string };
 export type WorktreeManagerConfig = { repoSearchRoots: string[] };
 export type WorktreePlan = { repoRoot: string; name: string; branch: string; path: string };
@@ -51,22 +51,20 @@ export function shellQuote(input: string): string {
 }
 
 export function parseWorktreeList(porcelain: string): WorktreeEntry[] {
-	return porcelain
-		.split(/\n\s*\n/)
-		.map((block) => block.trim())
-		.filter(Boolean)
-		.map((block) => {
-			const lines = block.split(/\n/);
-			const worktreeLine = lines.find((line) => line.startsWith("worktree "));
-			if (!worktreeLine) return undefined;
+	const entries: WorktreeEntry[] = [];
+	for (const rawBlock of porcelain.split(/\n\s*\n/)) {
+		const block = rawBlock.trim();
+		if (!block) continue;
+		const lines = block.split(/\n/);
+		const worktreeLine = lines.find((line) => line.startsWith("worktree "));
+		if (!worktreeLine) continue;
 
-			const path = worktreeLine.slice("worktree ".length);
-			const branchLine = lines.find((line) => line.startsWith("branch "));
-			const branchRef = branchLine?.slice("branch ".length);
-			const branch = branchRef?.replace(/^refs\/heads\//, "");
-			return { path, name: basename(path), branch };
-		})
-		.filter((entry): entry is WorktreeEntry => entry !== undefined);
+		const path = worktreeLine.slice("worktree ".length);
+		const branchRef = lines.find((line) => line.startsWith("branch "))?.slice("branch ".length);
+		const branch = branchRef?.replace(/^refs\/heads\//, "");
+		entries.push({ path, name: basename(path), branch });
+	}
+	return entries;
 }
 
 export function tmuxLaunchCommand(info: { name: string; path: string; insideTmux?: boolean }): {
@@ -156,11 +154,8 @@ export function worktreeRemovalCommands(worktreePath: string): { safe: string[];
 	};
 }
 
-export function worktreeCleanupCommands(worktreePath: string, branch: string): { remove: string[]; deleteBranch: string[] } {
-	return {
-		remove: ["worktree", "remove", "--force", worktreePath],
-		deleteBranch: ["branch", "-D", branch],
-	};
+export function isCleanWorktreeStatus(porcelain: string): boolean {
+	return porcelain.trim().length === 0;
 }
 
 export function forceRemovalPrompt(worktreePath: string, failure: string): string {
@@ -252,7 +247,20 @@ export function discoverRepositories(options: {
 		for (const child of children) add(child);
 	}
 
-	return { repos, warnings };
+	const rootsByAlias = new Map<string, string[]>();
+	for (const repo of repos) {
+		const roots = rootsByAlias.get(repo.alias) ?? [];
+		roots.push(repo.root);
+		rootsByAlias.set(repo.alias, roots);
+	}
+	const ambiguousAliases = new Set<string>();
+	for (const [alias, roots] of rootsByAlias) {
+		if (roots.length < 2) continue;
+		ambiguousAliases.add(alias);
+		warnings.push(`Ambiguous repo alias ${alias}: ${roots.join(", ")}`);
+	}
+
+	return { repos: repos.filter((repo) => !ambiguousAliases.has(repo.alias)), warnings };
 }
 
 export function worktreePickerEntries(repo: RepoCandidate, porcelain: string): WorktreePickerEntry[] {
@@ -303,9 +311,15 @@ export function ensureWorktree(repoRoot: string, rawName?: string, options: Ensu
 	const plan = ensureWorktreePlan(repoRoot, rawName);
 	mkdirSync(dirname(plan.path), { recursive: true });
 
-	const baseRef = resolveWorktreeBaseRef(repoRoot, options);
 	let created = false;
-	if (!existsSync(plan.path)) {
+	if (existsSync(plan.path)) {
+		const existing = parseWorktreeList(runGit(repoRoot, ["worktree", "list", "--porcelain"]))
+			.find((entry) => normalize(entry.path) === normalize(plan.path));
+		if (!existing || existing.branch !== plan.branch) {
+			throw new Error(`${plan.path} exists but is not the expected git worktree on ${plan.branch}`);
+		}
+	} else {
+		const baseRef = resolveWorktreeBaseRef(repoRoot, options);
 		runGit(repoRoot, ["worktree", "add", "-b", plan.branch, plan.path, baseRef]);
 		created = true;
 	}

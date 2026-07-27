@@ -8,7 +8,7 @@ Pi package that launches Claude Code with a selected Claude skill in tmux.
 /claude-skill
 ```
 
-Shows an auto-refreshing fuzzy picker of up to 10 discovered Claude skills. Type to filter by skill name or description. After selection, it prompts for optional arguments, then opens Claude in tmux with:
+Discovers Claude skills when the command opens and shows a fuzzy picker of up to 10 results. Type to filter by skill name or description. After selection, it prompts for optional arguments, then opens Claude in tmux with:
 
 ```text
 /skill:<skill-name> <args>
