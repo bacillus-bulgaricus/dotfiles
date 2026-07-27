@@ -131,6 +131,8 @@ test('every local Pi package has a runnable test script', () => {
 test('CI runs clean-install tests typechecking and repository checks', () => {
   const workflow = readFileSync('.github/workflows/check.yml', 'utf8');
 
+  assert.match(workflow, /actions\/checkout@v5/);
+  assert.match(workflow, /actions\/setup-node@v5/);
   for (const command of ['npm ci', 'npm test', 'npm run typecheck', 'npm run lint:shell', 'npm run check']) {
     assert.match(workflow, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
