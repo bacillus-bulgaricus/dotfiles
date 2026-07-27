@@ -35,6 +35,8 @@ test('chezmoi excludes repository-only roots from the home target state', () => 
   for (const file of ['README.md', 'package.json', 'package-lock.json', 'tsconfig.json']) {
     assert.match(ignore, new RegExp(`^${file.replace('.', '\\.')}$`, 'm'));
   }
+  assert.match(ignore, /\{\{ if \(index \. "work"\) -\}\}/);
+  assert.doesNotMatch(ignore, /default false \.work/);
 });
 
 test('ssh config manager rejects an unmatched marker without changing the file', () => {
